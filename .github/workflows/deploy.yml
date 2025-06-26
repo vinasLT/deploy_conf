@@ -62,7 +62,7 @@ jobs:
 
       - name: Upload .env to server
         run: |
-          scp -i ~/.ssh/id_rsa .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/srv/vinaslt/deploy_config/.env
+          scp -i ~/.ssh/id_rsa .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/srv/vinaslt/deploy_conf/.env
 
       - name: SSH into server and restart containers
         uses: appleboy/ssh-action@v1.0.3
@@ -74,7 +74,7 @@ jobs:
           script: |
             set -e
 
-            cd /srv/vinaslt/deploy_config
+            cd /srv/vinaslt/deploy_conf
 
             echo "🔄 Pulling latest changes from main branch..."
             git fetch origin main
