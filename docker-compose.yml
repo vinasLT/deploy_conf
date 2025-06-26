@@ -24,6 +24,8 @@ services:
     entrypoint: ["/app/entrypoint.sh"]
     environment:
       - API_SERVICE_URL=http://api_service:8000/
+      - PAYMENT_SERVICE_URL=http://payment_service:8002/
+      - CARFAX_SERVICE_URL=http://carfax_service:8001/
     depends_on:
       - postgres_bot
       - api_service
