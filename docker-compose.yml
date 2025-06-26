@@ -11,7 +11,7 @@ services:
       - "8080:8080"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik/acme.json:/letsencrypt/acme.json
+      - traefik_letsencrypt:/letsencrypt
       - ./traefik/logs:/logs
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -138,6 +138,8 @@ volumes:
   pg_data_carfax:
   pg_data_payment:
   redis_api_data:
+  traefik_letsencrypt:
+    driver: local
 
 networks:
   telegram_bot_net:
