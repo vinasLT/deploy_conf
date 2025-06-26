@@ -123,8 +123,6 @@ services:
       - "traefik.http.routers.payment.middlewares=payment-strip@docker"
       - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
       - "traefik.http.services.payment.loadbalancer.server.port=8002"
-      - "traefik.http.services.payment.loadbalancer.passhostheader=true"
-      - "traefik.http.services.payment.loadbalancer.serverstransport=default"
 
   postgres_payment:
     image: postgres:15
