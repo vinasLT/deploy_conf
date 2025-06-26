@@ -103,26 +103,44 @@ services:
   payment_service:
     image: ivanskrb21/vinaslt_payment_service:latest
     container_name: payment_service
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "debug"]
-    entrypoint: ["/app/entrypoint.sh"]
+
+    # запуск приложения
+    command: [ "uvicorn", "main:app",
+               "--host", "0.0.0.0",
+               "--port", "8002",
+               "--log-level", "debug" ]
+    entrypoint: [ "/app/entrypoint.sh" ]
+
     env_file:
       - .env
     expose:
       - "8002"
     environment:
       - CARFAX_SERVICE_URL=http://carfax_service:8001/
+
+    # порядок важен: traefik_net — первой
     networks:
+      - traefik_net          # <- Traefik увидит именно этот IP
       - payment_service_net
       - internal_net
-      - traefik_net
+
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"                     # какая сеть для прокси
+
+      # --- основной роутер /payment/* ---
       - "traefik.http.routers.payment.rule=Host(`api.vinas.lt`) && PathPrefix(`/payment`)"
       - "traefik.http.routers.payment.entrypoints=websecure"
       - "traefik.http.routers.payment.tls.certresolver=letsencrypt"
       - "traefik.http.routers.payment.middlewares=payment-strip@docker"
       - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
       - "traefik.http.services.payment.loadbalancer.server.port=8002"
+
+      # --- отдельный роутер для /openapi.json (Swagger) ---
+      - "traefik.http.routers.payment-openapi.rule=Host(`api.vinas.lt`) && Path(`/openapi.json`)"
+      - "traefik.http.routers.payment-openapi.entrypoints=websecure"
+      - "traefik.http.routers.payment-openapi.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.payment-openapi.service=payment"
 
   postgres_payment:
     image: postgres:15
