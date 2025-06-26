@@ -4,7 +4,9 @@ version: "3.9"
 # С Е Т И
 ############################
 networks:
-  traefik_net:           # «публичная» сеть – к ней подключён только Traefik и сервисы, которые надо открыть наружу
+  traefik_net:
+    name: traefik_net
+    driver: bridge
   internal_net:          # обмен между микросервисами
   telegram_bot_net:
   carfax_service_net:
