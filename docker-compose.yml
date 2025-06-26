@@ -37,7 +37,7 @@ services:
   api_service:
     image: ivanskrb21/vinaslt_api_service:latest
     container_name: api_service
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
     env_file:
       - .env
     expose:
@@ -74,7 +74,7 @@ services:
   carfax_service:
     image: ivanskrb21/vinaslt_carfax_service:latest
     container_name: carfax_service
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001" ]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "debug"]
     entrypoint: ["/app/entrypoint.sh"]
     env_file:
       - .env
@@ -101,7 +101,7 @@ services:
   payment_service:
     image: ivanskrb21/vinaslt_payment_service:latest
     container_name: payment_service
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002" ]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "debug"]
     entrypoint: ["/app/entrypoint.sh"]
     env_file:
       - .env
