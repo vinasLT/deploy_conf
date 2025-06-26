@@ -114,6 +114,7 @@ services:
     networks:
       - payment_service_net
       - internal_net
+      - traefik_net
     labels:
       - "traefik.http.routers.payment.rule=Host(`api.vinas.lt`) && PathPrefix(`/payment`)"
       - "traefik.http.routers.payment.entrypoints=websecure"
