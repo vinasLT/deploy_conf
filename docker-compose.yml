@@ -115,11 +115,14 @@ services:
       - payment_service_net
       - internal_net
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.payment.rule=Host(`api.vinas.lt`) && PathPrefixStrip(`/payment`)"
+      - "traefik.http.routers.payment.rule=Host(`api.vinas.lt`) && PathPrefix(`/payment`)"
       - "traefik.http.routers.payment.entrypoints=websecure"
       - "traefik.http.routers.payment.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.payment.middlewares=payment-strip@docker"
+      - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
       - "traefik.http.services.payment.loadbalancer.server.port=8002"
+      - "traefik.http.services.payment.loadbalancer.passhostheader=true"
+      - "traefik.http.services.payment.loadbalancer.serverstransport=default"
 
   postgres_payment:
     image: postgres:15
