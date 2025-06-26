@@ -6,8 +6,7 @@ accessLog:
   filePath: /logs/access.log
 
 api:
-  dashboard: true
-  insecure: false  # только для отладки! (позволяет доступ без HTTPS)
+  dashboard: true        # insecure=true только во время отладки
 
 entryPoints:
   web:
@@ -18,6 +17,7 @@ entryPoints:
 providers:
   docker:
     exposedByDefault: false
+    network: traefik_net
 
 certificatesResolvers:
   letsencrypt:
