@@ -40,6 +40,7 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "5432:5432"
       - "8080:8080"          # Web-UI (убери наружу, когда перестанешь дебажить)
 
     volumes:
@@ -136,12 +137,15 @@ services:
     image: postgres:15
     container_name: postgres_carfax
     volumes: [pg_data_carfax:/var/lib/postgresql/data]
+    ports:
+      - '5432:5432'
     environment:
       - POSTGRES_USER=${CARFAX_DB_USER}
       - POSTGRES_PASSWORD=${CARFAX_DB_PASS}
       - POSTGRES_DB=${CARFAX_DB_NAME}
     networks:
       - carfax_service_net
+      - traefik_net
 
   ##########################
   # Payment-сервис
