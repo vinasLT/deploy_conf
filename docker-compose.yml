@@ -149,7 +149,7 @@ services:
       - internal_net
 
   postgres_carfax:
-    image: postgres:16-alpine
+    image: postgres:15
     container_name: postgres_carfax
     volumes:
       - pg_data_carfax:/var/lib/postgresql/data
@@ -203,7 +203,7 @@ services:
       - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
 
   postgres_payment:
-    image: postgres:16-alpine
+    image: postgres:15
     container_name: postgres_payment
     volumes:
       - pg_data_payment:/var/lib/postgresql/data
