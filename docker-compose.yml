@@ -8,10 +8,15 @@ networks:
     name: traefik_net
     driver: bridge
   internal_net:          # обмен между микросервисами
+    driver: bridge
   telegram_bot_net:
+    driver: bridge
   carfax_service_net:
+    driver: bridge
   payment_service_net:
+    driver: bridge
   api_net:
+    driver: bridge
 
 ############################
 # Г Л О Б А Л Ь Н Ы Е  Т О М А
@@ -30,26 +35,30 @@ services:
   # Traefik
   ##########################
   traefik:
-    image: traefik:latest
+    image: traefik:v3.2
     container_name: traefik
     restart: unless-stopped
-
-    command:
-      - --configFile=/etc/traefik/traefik.yml
 
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"          # Web-UI (убери наружу, когда перестанешь дебажить)
+      - "8080:8080"    # Dashboard для отладки
 
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - traefik_letsencrypt:/letsencrypt
+      - ./letsencrypt:/letsencrypt
       - ./traefik/logs:/logs
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
     networks:
-      - traefik_net         # важно: только эта сеть нужна Traefik
+      - traefik_net
+
+    environment:
+      - TRAEFIK_LOG_LEVEL=DEBUG
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"
 
   ##########################
   # Telegram-бот
@@ -87,17 +96,19 @@ services:
 
     env_file: [.env]
     environment:
-      - REDIS_URL=redis://redis_api_service:${API_REDIS_PORT}/0
+      - REDIS_URL=redis://redis_api_service:6379/0
+
+    depends_on:
+      - redis_api_service
 
     networks:
       - api_net
       - internal_net
 
   redis_api_service:
-    image: redis:7
+    image: redis:7-alpine
     container_name: redis_api_service
-    ports:
-      - "${API_REDIS_PORT}:6379"
+    expose: ["6379"]
     volumes:
       - redis_api_data:/data
     restart: unless-stopped
@@ -105,13 +116,15 @@ services:
       - api_net
 
   postgres_bot:
-    image: postgres:15
+    image: postgres:16-alpine
     container_name: postgres_bot
-    volumes: [pg_data_bot:/var/lib/postgresql/data]
+    volumes:
+      - pg_data_bot:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=${BOT_DB_USER}
       - POSTGRES_PASSWORD=${BOT_DB_PASS}
       - POSTGRES_DB=${BOT_DB_NAME}
+    restart: unless-stopped
     networks:
       - telegram_bot_net
 
@@ -128,23 +141,25 @@ services:
 
     env_file: [.env]
 
+    depends_on:
+      - postgres_carfax
+
     networks:
       - carfax_service_net
       - internal_net
 
   postgres_carfax:
-    image: postgres:15
+    image: postgres:16-alpine
     container_name: postgres_carfax
-    volumes: [pg_data_carfax:/var/lib/postgresql/data]
-    ports:
-      - '5432:5432'
+    volumes:
+      - pg_data_carfax:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=${CARFAX_DB_USER}
       - POSTGRES_PASSWORD=${CARFAX_DB_PASS}
       - POSTGRES_DB=${CARFAX_DB_NAME}
+    restart: unless-stopped
     networks:
       - carfax_service_net
-      - traefik_net
 
   ##########################
   # Payment-сервис
@@ -161,7 +176,9 @@ services:
     environment:
       - CARFAX_SERVICE_URL=http://carfax_service:8001/
 
-    # порядок сетей -> первый IP попадёт в Traefik
+    depends_on:
+      - postgres_payment
+
     networks:
       - traefik_net          # публичный трафик
       - payment_service_net  # приватная БД
@@ -169,26 +186,32 @@ services:
 
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"
 
-      # — Router для всего, что начинается с /payment
+      # HTTPS-роутер
       - "traefik.http.routers.payment.rule=Host(`api.vinas.lt`) && PathPrefix(`/payment`)"
       - "traefik.http.routers.payment.entrypoints=websecure"
+      - "traefik.http.routers.payment.tls=true"
       - "traefik.http.routers.payment.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.payment.middlewares=payment-strip@docker"
+      - "traefik.http.routers.payment.middlewares=payment-strip"
+      - "traefik.http.routers.payment.service=payment"
 
-      # StripPrefix режет /payment перед тем, как запрос попадёт в сервис
-      - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
-
-      # Порт, который слушает контейнер
+      # Сервис
       - "traefik.http.services.payment.loadbalancer.server.port=8002"
 
+      # Middleware для удаления префикса
+      - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
+
   postgres_payment:
-    image: postgres:15
+    image: postgres:16-alpine
     container_name: postgres_payment
-    volumes: [pg_data_payment:/var/lib/postgresql/data]
+    volumes:
+      - pg_data_payment:/var/lib/postgresql/data
     environment:
       - POSTGRES_USER=${PAYMENT_DB_USER}
       - POSTGRES_PASSWORD=${PAYMENT_DB_PASS}
       - POSTGRES_DB=${PAYMENT_DB_NAME}
+    expose: ["5432"]
+    restart: unless-stopped
     networks:
       - payment_service_net
