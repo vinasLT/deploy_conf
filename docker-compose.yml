@@ -42,6 +42,14 @@ services:
       - "443:443"
       - "8080:8080"          # Web-UI (убери наружу, когда перестанешь дебажить)
 
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.http-catchall.rule=HostRegexp(`{any:.+}`)"
+      - "traefik.http.routers.http-catchall.entrypoints=web"
+      - "traefik.http.routers.http-catchall.middlewares=https-redirect"
+      - "traefik.http.routers.http-catchall.service=noop@internal"
+      - "traefik.http.middlewares:https-redirect.redirectscheme.scheme=https"
+
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - traefik_letsencrypt:/letsencrypt
@@ -166,18 +174,19 @@ services:
 
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"
 
-      # — Router для всего, что начинается с /payment
+      # HTTPS-роутер
       - "traefik.http.routers.payment.rule=Host(`api.vinas.lt`) && PathPrefix(`/payment`)"
       - "traefik.http.routers.payment.entrypoints=websecure"
+      - "traefik.http.routers.payment.tls=true"
       - "traefik.http.routers.payment.tls.certresolver=letsencrypt"
       - "traefik.http.routers.payment.middlewares=payment-strip@docker"
-
-      # StripPrefix режет /payment перед тем, как запрос попадёт в сервис
-      - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
-
-      # Порт, который слушает контейнер
       - "traefik.http.services.payment.loadbalancer.server.port=8002"
+
+
+      # Снимание префикса
+      - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
 
   postgres_payment:
     image: postgres:15
