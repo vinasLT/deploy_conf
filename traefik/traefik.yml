@@ -1,53 +1,30 @@
-# Traefik v3 Configuration
+# Traefik v3 Configuration с исправленным ACME
 
 # Логирование
 log:
-  level: INFO  # Измените на DEBUG только при отладке
+  level: DEBUG
   filePath: /logs/traefik.log
-  format: json
 
 # Логи доступа
 accessLog:
   filePath: /logs/access.log
-  format: json
-  filters:
-    statusCodes:
-      - "200-299"
-      - "400-499"
-      - "500-599"
 
 # API и Dashboard
 api:
   dashboard: true
-  debug: false
-  # insecure: true  # Раскомментируйте ТОЛЬКО для локальной отладки
+  insecure: true  # Для отладки
 
 # Точки входа
 entryPoints:
   web:
     address: ":80"
-    # Автоматический редирект HTTP -> HTTPS
-    http:
-      redirections:
-        entryPoint:
-          to: websecure
-          scheme: https
-          permanent: true
+    # Важно! Не делаем автоматический редирект при получении сертификатов
 
   websecure:
     address: ":443"
     http:
       tls:
         certResolver: letsencrypt
-        domains:
-          - main: vinas.lt
-            sans:
-              - "*.vinas.lt"
-    # Настройки для улучшенной безопасности
-    http2:
-      maxConcurrentStreams: 100
-    http3:
-      advertisedPort: 443
 
 # Провайдеры
 providers:
@@ -63,36 +40,10 @@ certificatesResolvers:
     acme:
       email: peyrovskaaa@gmail.com
       storage: /letsencrypt/acme.json
-      keyType: EC256  # Более современный и быстрый тип ключа
+      keyType: EC256
+      # Сначала используем staging для тестирования
+#      caServer: https://acme-staging-v02.api.letsencrypt.org/directory
+      # После успешного теста переключитесь на production:
+      caServer: https://acme-v02.api.letsencrypt.org/directory
       httpChallenge:
         entryPoint: web
-      # Для продакшена используйте основной сервер:
-      caServer: https://acme-v02.api.letsencrypt.org/directory
-      # Для тестирования используйте staging:
-      # caServer: https://acme-staging-v02.api.letsencrypt.org/directory
-
-# Ping endpoint для health checks
-ping:
-  entryPoint: web
-
-# Метрики (опционально, но полезно для мониторинга)
-# metrics:
-#   prometheus:
-#     entryPoint: metrics
-#     addEntryPointsLabels: true
-#     addServicesLabels: true
-#     addRoutersLabels: true
-
-# Глобальные настройки
-global:
-  checkNewVersion: true
-  sendAnonymousUsage: false
-
-# Настройки производительности
-serversTransport:
-  insecureSkipVerify: false
-  maxIdleConnsPerHost: 200
-  forwardingTimeouts:
-    dialTimeout: 30s
-    responseHeaderTimeout: 30s
-    idleConnTimeout: 90s

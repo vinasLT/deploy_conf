@@ -42,22 +42,23 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      # - "8080:8080"    # Web-UI (раскомментируйте только для дебага на api.insecure=true)
+      - "8080:8080"    # Dashboard для отладки
 
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
-      - traefik_letsencrypt:/letsencrypt
+      - ./letsencrypt:/letsencrypt
       - ./traefik/logs:/logs
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
     networks:
       - traefik_net
 
-    healthcheck:
-      test: ["CMD", "traefik", "healthcheck", "--ping"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
+    environment:
+      - TRAEFIK_LOG_LEVEL=DEBUG
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_net"
 
   ##########################
   # Telegram-бот
