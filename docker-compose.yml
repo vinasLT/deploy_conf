@@ -116,7 +116,7 @@ services:
       - api_net
 
   postgres_bot:
-    image: postgres:16-alpine
+    image: postgres:15
     container_name: postgres_bot
     volumes:
       - pg_data_bot:/var/lib/postgresql/data
