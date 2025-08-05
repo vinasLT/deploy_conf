@@ -1,18 +1,22 @@
+# Traefik v3 Configuration
 
+# Логирование
 log:
-  level: INFO
+  level: INFO  # Измените на DEBUG только при отладке
   filePath: /logs/traefik.log
   format: json
 
+# Логи доступа
 accessLog:
   filePath: /logs/access.log
   format: json
   filters:
     statusCodes:
       - "200-299"
-      - "400-499" 
+      - "400-499"
       - "500-599"
 
+# API и Dashboard
 api:
   dashboard: true
   debug: false
@@ -29,7 +33,7 @@ entryPoints:
           to: websecure
           scheme: https
           permanent: true
-          
+
   websecure:
     address: ":443"
     http:
@@ -69,15 +73,15 @@ certificatesResolvers:
 
 # Ping endpoint для health checks
 ping:
-  entryPoint: traefik
+  entryPoint: web
 
 # Метрики (опционально, но полезно для мониторинга)
-metrics:
-  prometheus:
-    entryPoint: traefik
-    addEntryPointsLabels: true
-    addServicesLabels: true
-    addRoutersLabels: true
+# metrics:
+#   prometheus:
+#     entryPoint: metrics
+#     addEntryPointsLabels: true
+#     addServicesLabels: true
+#     addRoutersLabels: true
 
 # Глобальные настройки
 global:
