@@ -136,12 +136,15 @@ services:
     image: postgres:15
     container_name: postgres_carfax
     volumes: [pg_data_carfax:/var/lib/postgresql/data]
+    ports:
+      - '5432:5432'
     environment:
       - POSTGRES_USER=${CARFAX_DB_USER}
       - POSTGRES_PASSWORD=${CARFAX_DB_PASS}
       - POSTGRES_DB=${CARFAX_DB_NAME}
     networks:
       - carfax_service_net
+      - traefik_net
 
   ##########################
   # Payment-сервис
@@ -187,8 +190,5 @@ services:
       - POSTGRES_USER=${PAYMENT_DB_USER}
       - POSTGRES_PASSWORD=${PAYMENT_DB_PASS}
       - POSTGRES_DB=${PAYMENT_DB_NAME}
-    ports:
-      - "5432:5432"
     networks:
       - payment_service_net
-      - traefik_net
