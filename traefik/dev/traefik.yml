@@ -1,0 +1,28 @@
+# Traefik v3 Configuration для localhost (без сертификатов)
+
+# Логирование
+log:
+  level: DEBUG
+  filePath: /logs/traefik.log
+
+# Логи доступа
+accessLog:
+  filePath: /logs/access.log
+
+# API и Dashboard
+api:
+  dashboard: true
+  insecure: true  # Для localhost это безопасно
+
+# Точки входа
+entryPoints:
+  web:
+    address: ":80"
+
+# Провайдеры
+providers:
+  docker:
+    endpoint: "unix:///var/run/docker.sock"
+    exposedByDefault: false
+    network: traefik_net
+    watch: true
