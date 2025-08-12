@@ -1,0 +1,88 @@
+http:
+  routers:
+    # Существующие маршруты
+    payment-webhook:
+      entryPoints:
+        - web
+      rule: "Host(`localhost`) && (Path(`/payment/webhook`) || PathPrefix(`/payment/webhook/`))"
+      service: payment
+      priority: 100
+      middlewares:
+        - payment-strip
+
+    payment-protected:
+      entryPoints:
+        - web
+      rule: "Host(`localhost`) && PathPrefix(`/payment`)"
+      service: payment
+      middlewares:
+        - auth-forward
+        - payment-strip
+      priority: 10
+
+    auth:
+      entryPoints:
+        - web
+      rule: "Host(`localhost`) && PathPrefix(`/auth`)"
+      service: auth
+      middlewares:
+        - auth-strip
+
+    rabbitmq-ui:
+      entryPoints:
+        - web
+      rule: "Host(`localhost`) && PathPrefix(`/rabbitmq`)"
+      service: rabbitmq-ui
+      middlewares:
+        - rabbitmq-strip
+
+  services:
+    # Существующие сервисы
+    auth:
+      loadBalancer:
+        servers:
+          - url: "http://auth_service:8003"
+
+    payment:
+      loadBalancer:
+        servers:
+          - url: "http://payment_service:8002"
+
+    rabbitmq-ui:
+      loadBalancer:
+        servers:
+          - url: "http://rabbitmq:15672"
+
+
+  middlewares:
+    auth-strip:
+      stripPrefix:
+        prefixes:
+          - /auth
+
+    payment-strip:
+      stripPrefix:
+        prefixes:
+          - /payment
+
+    rabbitmq-strip:
+      stripPrefix:
+        prefixes:
+          - /rabbitmq
+
+    auth-forward:
+      forwardAuth:
+        address: "http://auth_service:8003/v1/verify"
+        trustForwardHeader: true
+        authRequestHeaders:
+          - Authorization
+          - Cookie
+          - X-Forwarded-Method
+          - X-Forwarded-Host
+          - X-Forwarded-Uri
+        authResponseHeaders:
+          - X-User-ID
+          - X-User-Email
+          - X-User-Role
+          - X-Token-Expires
+          - X-Permissions

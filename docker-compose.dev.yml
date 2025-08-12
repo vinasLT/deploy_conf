@@ -1,4 +1,4 @@
-version: "3.9"
+version: '3.8'
 
 ############################
 # С Е Т И
@@ -7,7 +7,7 @@ networks:
   traefik_net:
     name: traefik_net
     driver: bridge
-  internal_net:          # обмен между микросервисами
+  internal_net:
     driver: bridge
   telegram_bot_net:
     driver: bridge
@@ -15,8 +15,17 @@ networks:
     driver: bridge
   payment_service_net:
     driver: bridge
+  auth_service_net:
+    driver: bridge
   api_net:
     driver: bridge
+  rabbitmq_net:
+    driver: bridge
+  elk:
+    driver: bridge
+  monitoring:
+    driver: bridge
+
 
 ############################
 # Г Л О Б А Л Ь Н Ы Е  Т О М А
@@ -27,39 +36,133 @@ volumes:
   pg_data_bot:
   pg_data_carfax:
   pg_data_payment:
-
+  pg_data_auth:
+  rabbitmq_data:
+  redis_auth_data:
+  esdata:
+  grafana-storage:
 
 services:
 
-  ##########################
-  # Traefik
-  ##########################
   traefik:
-    image: traefik:v3.0
+    image: traefik:v3.5
     container_name: traefik
     restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--log.level=DEBUG"
     ports:
       - "80:80"
-      - "8080:8080"  # Dashboard
+      - "8080:8080"
     volumes:
       - ./traefik/dev/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dev/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/dev/logs:/logs
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - traefik_net
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik_net"
 
-  ##########################
-  # Telegram-бот
-  ##########################
+  auth_service:
+    image: ivanskrb21/vinaslt_auth_service:latest
+    container_name: auth_service
+    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003", "--log-level", "debug", "--proxy-headers" ]
+    expose: [ "8003" ]
+    environment:
+      - DB_HOST=postgres_auth
+      - DB_PORT=5432
+      - DB_NAME=${AUTH_DB_NAME}
+      - DB_PASSWORD=${AUTH_DB_PASS}
+      - DB_USER=${AUTH_DB_USER}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+      - REDIS_URL=redis://redis_auth:6379
+      - RABBITMQ_EXCHANGE_NAME
+      - AWS_ACCESS_KEY_ID
+      - AWS_KMS_KEY_ARN
+      - AWS_REGION
+      - AWS_SECRET_ACCESS_KEY
+      - DEBUG
+    depends_on:
+      - postgres_auth
+    volumes:
+      - ./logs:/app/logs
+
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8003/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - traefik_net
+      - auth_service_net
+      - internal_net
+
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+      - RABBITMQ_DEFAULT_VHOST=/
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+    networks:
+      - rabbitmq_net
+      - internal_net
+      - traefik_net
+    healthcheck:
+      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  redis_auth:
+    image: redis:8-alpine
+    container_name: redis_auth
+    restart: unless-stopped
+    volumes:
+      - redis_auth_data:/data
+    networks:
+      - internal_net
+      - auth_service_net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  postgres_auth:
+    image: postgres:15
+    container_name: postgres_auth
+    volumes:
+      - pg_data_auth:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${AUTH_DB_USER}
+      - POSTGRES_PASSWORD=${AUTH_DB_PASS}
+      - POSTGRES_DB=${AUTH_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${AUTH_DB_USER} -d ${AUTH_DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auth_service_net
+
   bot:
     image: ivanskrb21/vinaslt_bot:latest
     container_name: telegram_bot
     entrypoint: ["/app/entrypoint.sh"]
     command: ["python3", "main.py"]
-
     environment:
       - API_SERVICE_URL=http://api_service:8000/
       - PAYMENT_SERVICE_URL=http://payment_service:8002/
@@ -71,33 +174,24 @@ services:
       - BOT_DB_USER=${BOT_DB_USER}
       - BOT_DB_PASS=${BOT_DB_PASS}
       - API_BOT_TOKEN
-
     depends_on:
       - api_service
       - postgres_bot
-
     restart: unless-stopped
     networks:
       - telegram_bot_net
       - internal_net
 
-  ##########################
-  # API-сервис (VIN lookup)
-  ##########################
   api_service:
     image: ivanskrb21/vinaslt_api_service:latest
     container_name: api_service
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug", "--proxy-headers"]
-
     expose: ["8000"]
-
     env_file: [.env]
     environment:
       - REDIS_URL=redis://redis_api_service:6379/0
-
     depends_on:
       - redis_api_service
-
     networks:
       - api_net
       - internal_net
@@ -125,20 +219,14 @@ services:
     networks:
       - telegram_bot_net
 
-  ##########################
-  # Carfax-сервис
-  ##########################
   carfax_service:
     image: ivanskrb21/vinaslt_carfax_service:latest
     container_name: carfax_service
     entrypoint: ["/app/entrypoint.sh"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "debug"]
-
     expose: ["8001"]
-
     depends_on:
       - postgres_carfax
-
     environment:
       - CARFAX_DB_HOST=postgres_carfax
       - CARFAX_DB_PORT=5432
@@ -147,7 +235,6 @@ services:
       - CARFAX_DB_NAME=${CARFAX_DB_NAME}
       - CARFAX_API_TOKEN
       - DEBUG
-
     networks:
       - carfax_service_net
       - internal_net
@@ -165,17 +252,12 @@ services:
     networks:
       - carfax_service_net
 
-  ##########################
-  # Payment-сервис
-  ##########################
   payment_service:
     image: ivanskrb21/vinaslt_payment_service:latest
     container_name: payment_service
     entrypoint: ["/app/entrypoint.sh"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "debug", "--proxy-headers"]
-
     expose: ["8002"]
-
     environment:
       - CARFAX_SERVICE_URL=http://carfax_service:8001/
       - PAYMENT_DB_HOST=postgres_payment
@@ -187,28 +269,14 @@ services:
       - STRIPE_WEBHOOK_SECRET
       - DEBUG
     depends_on:
-      - postgres_payment
-
+      postgres_payment:
+        condition: service_healthy
+      auth_service:
+        condition: service_healthy
     networks:
-      - traefik_net          # публичный трафик
-      - payment_service_net  # приватная БД
-      - internal_net         # сервис-to-сервис
-
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik_net"
-
-      # HTTPS-роутер
-      - "traefik.http.routers.payment.entrypoints=web"
-      - "traefik.http.routers.payment.rule=Host(`localhost`) && PathPrefix(`/payment`)"
-      - "traefik.http.routers.payment.middlewares=payment-strip"
-      - "traefik.http.routers.payment.service=payment"
-
-      # Сервис
-      - "traefik.http.services.payment.loadbalancer.server.port=8002"
-
-      # Middleware для удаления префикса
-      - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
+      - traefik_net
+      - payment_service_net
+      - internal_net
 
   postgres_payment:
     image: postgres:15
@@ -219,7 +287,62 @@ services:
       - POSTGRES_USER=${PAYMENT_DB_USER}
       - POSTGRES_PASSWORD=${PAYMENT_DB_PASS}
       - POSTGRES_DB=${PAYMENT_DB_NAME}
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER} -d ${PAYMENT_DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     expose: ["5432"]
     restart: unless-stopped
     networks:
       - payment_service_net
+
+# LOGGING
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+      - ./loki-data:/tmp/loki  # Исправлен путь для соответствия конфигу
+    networks:
+      - monitoring
+    restart: unless-stopped
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    ports:
+      - "9080:9080"
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./promtail-config.yaml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - monitoring
+    depends_on:
+      - loki
+    restart: unless-stopped
+    user: root
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    networks:
+      - monitoring
+    depends_on:
+      - loki
+    restart: unless-stopped
+

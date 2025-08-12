@@ -6,6 +6,7 @@ param(
 
 switch ($command.ToLower()) {
     "up" {
+        docker compose -f $compose_file pull
         infisical run --env=$env -- docker compose -f $compose_file up -d
     }
     "down" {
