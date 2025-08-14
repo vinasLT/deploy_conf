@@ -1,13 +1,20 @@
 INFISICAL_ENV ?= dev
 COMPOSE_FILE ?= docker-compose.dev.yml
+COMPOSE_ARM_FILE ?= docker-compose.dev.arm64.yml
 
-.PHONY: up down logs restart clean-volumes pull help
+.PHONY: up down logs restart clean-volumes pull pull-arm help
 
 up: pull
 	infisical run --env=$(INFISICAL_ENV) -- docker compose -f $(COMPOSE_FILE) up -d
 
+up-arm: pull-arm
+	infisical run --env=$(INFISICAL_ENV) -- docker compose -f $(COMPOSE_ARM_FILE) up -d
+
 down:
 	docker compose -f $(COMPOSE_FILE) down
+
+down-arm:
+	infisical run --env=$(INFISICAL_ENV) -- docker compose -f $(COMPOSE_ARM_FILE) down
 
 logs:
 	docker compose -f $(COMPOSE_FILE) logs -f
@@ -19,6 +26,9 @@ clean-volumes:
 
 pull:
 	docker compose -f $(COMPOSE_FILE) pull
+
+pull-arm:
+	infisical run --env=$(INFISICAL_ENV) -- docker compose -f $(COMPOSE_ARM_FILE) pull
 
 help:
 	@echo "Available commands:"
