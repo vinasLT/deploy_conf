@@ -16,6 +16,12 @@ run ```infisical init```
 
 run ```make up``` in root for MACOS
 
+run ``` .\run.ps1 up``` in root for WINDOWS
+
+run ```make help``` or ```.\run.ps1 help``` for see all commands
+
+
+
 
 
 

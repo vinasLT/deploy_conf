@@ -1,43 +1,49 @@
 http:
   routers:
-    # Существующие маршруты
+    # Payment service routes - публичные роуты должны быть с более высоким приоритетом
     payment-webhook:
-      entryPoints:
-        - web
-      rule: "Host(`localhost`) && (Path(`/payment/webhook`) || PathPrefix(`/payment/webhook/`))"
+      entryPoints: [web]
+      rule: "Host(`localhost`) && Path(`/payment/stripe/webhook`)"
       service: payment
-      priority: 100
-      middlewares:
-        - payment-strip
+      priority: 200  # Высокий приоритет для webhook
+      middlewares: [payment-strip]
+
+    payment-public:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && (Path(`/payment/docs`) || PathPrefix(`/payment/docs/`) || Path(`/payment/openapi.json`))"
+      service: payment
+      priority: 190  # Высокий приоритет для публичных эндпоинтов
+      middlewares: [payment-strip]
 
     payment-protected:
-      entryPoints:
-        - web
+      entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/payment`)"
       service: payment
-      middlewares:
-        - auth-forward
-        - payment-strip
-      priority: 10
+      priority: 50  # Низкий приоритет - срабатывает последним
+      middlewares: [auth-forward, payment-strip]
+
+    # Other services
+    grafana:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/grafana`)"
+      service: grafana
+      priority: 100
+
+    notification:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/notification`)"
+      service: notification
+      priority: 90
+      middlewares: [notification-strip]
 
     auth:
-      entryPoints:
-        - web
+      entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/auth`)"
       service: auth
-      middlewares:
-        - auth-strip
-
-    rabbitmq-ui:
-      entryPoints:
-        - web
-      rule: "Host(`localhost`) && PathPrefix(`/rabbitmq`)"
-      service: rabbitmq-ui
-      middlewares:
-        - rabbitmq-strip
+      priority: 80
+      middlewares: [auth-strip]
 
   services:
-    # Существующие сервисы
     auth:
       loadBalancer:
         servers:
@@ -48,28 +54,35 @@ http:
         servers:
           - url: "http://payment_service:8002"
 
-    rabbitmq-ui:
+    notification:
       loadBalancer:
         servers:
-          - url: "http://rabbitmq:15672"
+          - url: "http://notification_service:8004"
 
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://grafana:3000"
 
   middlewares:
+    # Strip prefix middlewares
     auth-strip:
       stripPrefix:
-        prefixes:
-          - /auth
+        prefixes: ["/auth"]
 
     payment-strip:
       stripPrefix:
-        prefixes:
-          - /payment
+        prefixes: ["/payment"]
+
+    notification-strip:
+      stripPrefix:
+        prefixes: ["/notification"]
 
     rabbitmq-strip:
       stripPrefix:
-        prefixes:
-          - /rabbitmq
+        prefixes: ["/rabbitmq"]
 
+    # Auth forward middleware
     auth-forward:
       forwardAuth:
         address: "http://auth_service:8003/v1/verify"

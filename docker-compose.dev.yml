@@ -1,7 +1,7 @@
 version: '3.8'
 
 ############################
-# С Е Т И
+# NETWORKS
 ############################
 networks:
   traefik_net:
@@ -17,18 +17,18 @@ networks:
     driver: bridge
   auth_service_net:
     driver: bridge
+  notification_service_net:
+    driver: bridge
   api_net:
     driver: bridge
   rabbitmq_net:
-    driver: bridge
-  elk:
     driver: bridge
   monitoring:
     driver: bridge
 
 
 ############################
-# Г Л О Б А Л Ь Н Ы Е  Т О М А
+# GLOBAL VOLUMES
 ############################
 volumes:
   traefik_letsencrypt:
@@ -37,12 +37,17 @@ volumes:
   pg_data_carfax:
   pg_data_payment:
   pg_data_auth:
+  pg_data_notification:
   rabbitmq_data:
   redis_auth_data:
-  esdata:
   grafana-storage:
+  loki_data:
 
 services:
+
+  ############################
+  # REVERSE PROXY & LOAD BALANCER
+  ############################
 
   traefik:
     image: traefik:v3.5
@@ -64,6 +69,11 @@ services:
     networks:
       - traefik_net
 
+  ############################
+  # APPLICATION MICROSERVICES
+  ############################
+
+  # Authentication and Authorization Service
   auth_service:
     image: ivanskrb21/vinaslt_auth_service:latest
     container_name: auth_service
@@ -77,6 +87,8 @@ services:
       - DB_USER=${AUTH_DB_USER}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
       - REDIS_URL=redis://redis_auth:6379
+      - ROOT_PATH=/auth
+      - ENVIRONMENT
       - RABBITMQ_EXCHANGE_NAME
       - AWS_ACCESS_KEY_ID
       - AWS_KMS_KEY_ARN
@@ -85,9 +97,9 @@ services:
       - DEBUG
     depends_on:
       - postgres_auth
+      - rabbitmq
     volumes:
       - ./logs:/app/logs
-
     healthcheck:
       test: [ "CMD-SHELL", "curl -f http://localhost:8003/health || exit 1" ]
       interval: 30s
@@ -99,6 +111,144 @@ services:
       - auth_service_net
       - internal_net
 
+  notification_service:
+    image: ivanskrb21/vinaslt_notification_service:latest
+    container_name: notification_service
+    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--log-level", "debug", "--proxy-headers"]
+    expose: [ "8004" ]
+    environment:
+      - DB_HOST=postgres_notification
+      - DB_PORT=5432
+      - DB_NAME=${NOTIFICATION_DB_NAME}
+      - DB_PASS=${NOTIFICATION_DB_PASS}
+      - DB_USER=${NOTIFICATION_DB_USER}
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+      - ROOT_PATH=/notification
+      - ENVIRONMENT
+      - RABBITMQ_EXCHANGE_NAME
+      - AWS_ACCESS_KEY_ID
+      - AWS_KMS_KEY_ARN
+      - AWS_REGION
+      - AWS_SECRET_ACCESS_KEY
+      - ENVIRONMENT
+      - DEBUG
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres_notification:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8004/health || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - traefik_net
+      - notification_service_net
+      - internal_net
+
+
+  # Main API Service
+  api_service:
+    image: ivanskrb21/vinaslt_api_service:latest
+    container_name: api_service
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug", "--proxy-headers"]
+    expose: ["8000"]
+    env_file: [.env]
+    environment:
+      - ROOT_PATH=/auction-api
+      - REDIS_URL=redis://redis_api_service:6379/0
+      - ENVIRONMENT
+    depends_on:
+      - redis_api_service
+    networks:
+      - api_net
+      - internal_net
+
+  # Telegram Bot Service
+  bot:
+    image: ivanskrb21/vinaslt_bot:latest
+    container_name: telegram_bot
+    entrypoint: ["/app/entrypoint.sh"]
+    command: ["python3", "main.py"]
+    environment:
+      - API_SERVICE_URL=http://api_service:8000/
+      - PAYMENT_SERVICE_URL=http://payment_service:8002/
+      - CARFAX_SERVICE_URL=http://carfax_service:8001/
+      - DB_HOST=postgres_bot
+      - DB_PORT=5432
+      - DEBUG
+      - DB_NAME=${BOT_DB_NAME}
+      - DB_USER=${BOT_DB_USER}
+      - DB_PASS=${BOT_DB_PASS}
+      - API_BOT_TOKEN
+    depends_on:
+      - api_service
+      - postgres_bot
+    restart: unless-stopped
+    networks:
+      - telegram_bot_net
+      - internal_net
+
+  # Carfax Integration Service (Vehicle History Reports)
+  carfax_service:
+    image: ivanskrb21/vinaslt_carfax_service:latest
+    container_name: carfax_service
+    entrypoint: ["/app/entrypoint.sh"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "debug"]
+    expose: ["8001"]
+    depends_on:
+      - postgres_carfax
+    environment:
+      - DB_HOST=postgres_carfax
+      - DB_PORT=5432
+      - DB_USER=${CARFAX_DB_USER}
+      - DB_PASS=${CARFAX_DB_PASS}
+      - DB_NAME=${CARFAX_DB_NAME}
+      - CARFAX_API_TOKEN
+      - ENVIRONMENT
+      - DEBUG
+    networks:
+      - carfax_service_net
+      - internal_net
+
+  # Payment Processing Service
+  payment_service:
+    image: ivanskrb21/vinaslt_payment_service:latest
+    container_name: payment_service
+    entrypoint: ["/app/entrypoint.sh"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "debug", "--proxy-headers"]
+    expose: ["8002"]
+    environment:
+      - ROOT_PATH=/payment
+      - CARFAX_SERVICE_URL=http://carfax_service:8001/
+      - DB_HOST=postgres_payment
+      - DB_PORT=5432
+      - DB_NAME=${PAYMENT_DB_NAME}
+      - DB_PASS=${PAYMENT_DB_PASS}
+      - DB_USER=${PAYMENT_DB_USER}
+      - STRIPE_SECRET_KEY
+      - STRIPE_WEBHOOK_SECRET
+      - ENVIRONMENT
+      - DEBUG
+    depends_on:
+      postgres_payment:
+        condition: service_healthy
+      auth_service:
+        condition: service_healthy
+    networks:
+      - traefik_net
+      - payment_service_net
+      - internal_net
+
+  ############################
+  # MESSAGE QUEUE
+  ############################
+
+  # RabbitMQ Message Broker
   rabbitmq:
     image: rabbitmq:3.12-management
     container_name: rabbitmq
@@ -116,7 +266,6 @@ services:
     networks:
       - rabbitmq_net
       - internal_net
-      - traefik_net
     healthcheck:
       test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
       interval: 30s
@@ -124,6 +273,11 @@ services:
       retries: 5
       start_period: 30s
 
+  ############################
+  # CACHING LAYER
+  ############################
+
+  # Redis for Authentication Service
   redis_auth:
     image: redis:8-alpine
     container_name: redis_auth
@@ -140,8 +294,31 @@ services:
       retries: 5
       start_period: 10s
 
+  # Redis for API Service
+  redis_api_service:
+    image: redis:7-alpine
+    container_name: redis_api_service
+    expose: ["6379"]
+    volumes:
+      - redis_api_data:/data
+    restart: unless-stopped
+    networks:
+      - api_net
+
+    healthcheck:
+      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  ############################
+  # DATABASES
+  ############################
+
+  # PostgreSQL for Authentication Service
   postgres_auth:
-    image: postgres:15
+    image: postgres:17.5
     container_name: postgres_auth
     volumes:
       - pg_data_auth:/var/lib/postgresql/data
@@ -158,56 +335,28 @@ services:
     networks:
       - auth_service_net
 
-  bot:
-    image: ivanskrb21/vinaslt_bot:latest
-    container_name: telegram_bot
-    entrypoint: ["/app/entrypoint.sh"]
-    command: ["python3", "main.py"]
-    environment:
-      - API_SERVICE_URL=http://api_service:8000/
-      - PAYMENT_SERVICE_URL=http://payment_service:8002/
-      - CARFAX_SERVICE_URL=http://carfax_service:8001/
-      - BOT_DB_HOST=postgres_bot
-      - BOT_DB_PORT=5432
-      - DEBUG
-      - BOT_DB_NAME=${BOT_DB_NAME}
-      - BOT_DB_USER=${BOT_DB_USER}
-      - BOT_DB_PASS=${BOT_DB_PASS}
-      - API_BOT_TOKEN
-    depends_on:
-      - api_service
-      - postgres_bot
-    restart: unless-stopped
-    networks:
-      - telegram_bot_net
-      - internal_net
-
-  api_service:
-    image: ivanskrb21/vinaslt_api_service:latest
-    container_name: api_service
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug", "--proxy-headers"]
-    expose: ["8000"]
-    env_file: [.env]
-    environment:
-      - REDIS_URL=redis://redis_api_service:6379/0
-    depends_on:
-      - redis_api_service
-    networks:
-      - api_net
-      - internal_net
-
-  redis_api_service:
-    image: redis:7-alpine
-    container_name: redis_api_service
-    expose: ["6379"]
+  # PostgreSQL for Notification Service
+  postgres_notification:
+    image: postgres:17.5
+    container_name: postgres_notification
     volumes:
-      - redis_api_data:/data
+      - pg_data_notification:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${NOTIFICATION_DB_USER}
+      - POSTGRES_PASSWORD=${NOTIFICATION_DB_PASS}
+      - POSTGRES_DB=${NOTIFICATION_DB_NAME}
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER} -d ${NOTIFICATION_DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
-      - api_net
+      - notification_service_net
 
+  # PostgreSQL for Telegram Bot
   postgres_bot:
-    image: postgres:15
+    image: postgres:17.5
     container_name: postgres_bot
     volumes:
       - pg_data_bot:/var/lib/postgresql/data
@@ -219,28 +368,9 @@ services:
     networks:
       - telegram_bot_net
 
-  carfax_service:
-    image: ivanskrb21/vinaslt_carfax_service:latest
-    container_name: carfax_service
-    entrypoint: ["/app/entrypoint.sh"]
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "debug"]
-    expose: ["8001"]
-    depends_on:
-      - postgres_carfax
-    environment:
-      - CARFAX_DB_HOST=postgres_carfax
-      - CARFAX_DB_PORT=5432
-      - CARFAX_DB_USER=${CARFAX_DB_USER}
-      - CARFAX_DB_PASS=${CARFAX_DB_PASS}
-      - CARFAX_DB_NAME=${CARFAX_DB_NAME}
-      - CARFAX_API_TOKEN
-      - DEBUG
-    networks:
-      - carfax_service_net
-      - internal_net
-
+  # PostgreSQL for Carfax Service
   postgres_carfax:
-    image: postgres:15
+    image: postgres:17.5
     container_name: postgres_carfax
     volumes:
       - pg_data_carfax:/var/lib/postgresql/data
@@ -252,34 +382,9 @@ services:
     networks:
       - carfax_service_net
 
-  payment_service:
-    image: ivanskrb21/vinaslt_payment_service:latest
-    container_name: payment_service
-    entrypoint: ["/app/entrypoint.sh"]
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "debug", "--proxy-headers"]
-    expose: ["8002"]
-    environment:
-      - CARFAX_SERVICE_URL=http://carfax_service:8001/
-      - PAYMENT_DB_HOST=postgres_payment
-      - PAYMENT_DB_PORT=5432
-      - PAYMENT_DB_NAME=${PAYMENT_DB_NAME}
-      - PAYMENT_DB_PASS=${PAYMENT_DB_PASS}
-      - PAYMENT_DB_USER=${PAYMENT_DB_USER}
-      - STRIPE_SECRET_KEY
-      - STRIPE_WEBHOOK_SECRET
-      - DEBUG
-    depends_on:
-      postgres_payment:
-        condition: service_healthy
-      auth_service:
-        condition: service_healthy
-    networks:
-      - traefik_net
-      - payment_service_net
-      - internal_net
-
+  # PostgreSQL for Payment Service
   postgres_payment:
-    image: postgres:15
+    image: postgres:17.5
     container_name: postgres_payment
     volumes:
       - pg_data_payment:/var/lib/postgresql/data
@@ -298,25 +403,26 @@ services:
     networks:
       - payment_service_net
 
-# LOGGING
+  ############################
+  # MONITORING & LOGGING STACK
+  ############################
+
+  # Loki - Log Aggregation System
   loki:
     image: grafana/loki:latest
     container_name: loki
-    ports:
-      - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./loki-config.yaml:/etc/loki/local-config.yaml
-      - ./loki-data:/tmp/loki  # Исправлен путь для соответствия конфигу
+      - ./loki-data:/tmp/loki
     networks:
       - monitoring
     restart: unless-stopped
 
+  # Promtail - Log Collector and Shipper
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
-    ports:
-      - "9080:9080"
     volumes:
       - /var/log:/var/log:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -330,19 +436,25 @@ services:
     restart: unless-stopped
     user: root
 
+  # Grafana - Monitoring Dashboard
+
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.1.1
     container_name: grafana
-    ports:
-      - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Настройка базового пути для работы через reverse proxy
+      - GF_SERVER_ROOT_URL=http://localhost/grafana/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      # Дополнительные настройки для корректной работы
+      - GF_SERVER_HTTP_PORT=3000
+      - GF_LOG_LEVEL=info
     volumes:
       - grafana-storage:/var/lib/grafana
     networks:
       - monitoring
+      - traefik_net
     depends_on:
       - loki
     restart: unless-stopped
-
