@@ -1,26 +1,34 @@
 http:
   routers:
-    # Payment service routes - публичные роуты должны быть с более высоким приоритетом
+
+    api:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/auction-api`)"
+      service: api_service
+      priority: 100
+      middlewares: [cors]
+
+
     payment-webhook:
       entryPoints: [web]
       rule: "Host(`localhost`) && Path(`/payment/stripe/webhook`)"
       service: payment
       priority: 200  # Высокий приоритет для webhook
-      middlewares: [payment-strip]
+      middlewares: [payment-strip, cors]
 
     payment-public:
       entryPoints: [web]
       rule: "Host(`localhost`) && (Path(`/payment/docs`) || PathPrefix(`/payment/docs/`) || Path(`/payment/openapi.json`))"
       service: payment
-      priority: 190  # Высокий приоритет для публичных эндпоинтов
-      middlewares: [payment-strip]
+      priority: 190
+      middlewares: [payment-strip, cors]
 
     payment-protected:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/payment`)"
       service: payment
       priority: 50  # Низкий приоритет - срабатывает последним
-      middlewares: [auth-forward, payment-strip]
+      middlewares: [auth-forward, payment-strip, cors]
 
     # Other services
     grafana:
@@ -34,14 +42,14 @@ http:
       rule: "Host(`localhost`) && PathPrefix(`/notification`)"
       service: notification
       priority: 90
-      middlewares: [notification-strip]
+      middlewares: [notification-strip, cors]
 
     auth:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/auth`)"
       service: auth
       priority: 80
-      middlewares: [auth-strip]
+      middlewares: [auth-strip, cors]
 
   services:
     auth:
@@ -66,9 +74,12 @@ http:
 
   middlewares:
     # Strip prefix middlewares
+
+    api-strip:
     auth-strip:
       stripPrefix:
-        prefixes: ["/auth"]
+        prefixes: ["/auction-api"]
+
 
     payment-strip:
       stripPrefix:
@@ -81,6 +92,25 @@ http:
     rabbitmq-strip:
       stripPrefix:
         prefixes: ["/rabbitmq"]
+
+    cors:
+      headers:
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowOriginList:
+          - "http://localhost"
+        accessControlAllowHeaders:
+          - "Content-Type"
+          - "Authorization"
+          - "X-Requested-With"
+        accessControlExposeHeaders:
+          - "X-Total-Count"
+        accessControlAllowCredentials: true
+        accessControlMaxAge: 86400
 
     # Auth forward middleware
     auth-forward:
