@@ -1,6 +1,5 @@
 http:
   routers:
-
     api:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/auction-api`)"
@@ -8,12 +7,11 @@ http:
       priority: 100
       middlewares: [cors]
 
-
     payment-webhook:
       entryPoints: [web]
       rule: "Host(`localhost`) && Path(`/payment/stripe/webhook`)"
       service: payment
-      priority: 200  # Высокий приоритет для webhook
+      priority: 200 # Высокий приоритет для webhook
       middlewares: [payment-strip, cors]
 
     payment-public:
@@ -27,7 +25,7 @@ http:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/payment`)"
       service: payment
-      priority: 50  # Низкий приоритет - срабатывает последним
+      priority: 50 # Низкий приоритет - срабатывает последним
       middlewares: [auth-forward, payment-strip, cors]
 
     # Other services
@@ -80,7 +78,6 @@ http:
       stripPrefix:
         prefixes: ["/auction-api"]
 
-
     payment-strip:
       stripPrefix:
         prefixes: ["/payment"]
@@ -102,7 +99,7 @@ http:
           - DELETE
           - OPTIONS
         accessControlAllowOriginList:
-          - "http://localhost"
+          - "*"
         accessControlAllowHeaders:
           - "Content-Type"
           - "Authorization"
