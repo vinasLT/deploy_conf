@@ -8,6 +8,13 @@ http:
       priority: 100
       middlewares: [cors]
 
+    adminer:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/adminer`)"
+      service: adminer
+      priority: 90
+      middlewares: [adminer-strip]
+
 
     payment-webhook:
       entryPoints: [web]
@@ -72,6 +79,11 @@ http:
         servers:
           - url: "http://grafana:3000"
 
+    adminer:
+      loadBalancer:
+        servers:
+          - url: "http://adminer:8080"
+
   middlewares:
     # Strip prefix middlewares
 
@@ -79,6 +91,10 @@ http:
     auth-strip:
       stripPrefix:
         prefixes: ["/auction-api"]
+
+    adminer-strip:
+      stripPrefix:
+        prefixes: ["/adminer"]
 
 
     payment-strip:

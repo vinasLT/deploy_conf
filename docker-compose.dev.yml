@@ -1,12 +1,38 @@
-############################
-# NETWORKS
-############################
+# ========================================================================
+# MICROSERVICES AUCTION PLATFORM - DOCKER COMPOSE CONFIGURATION
+# ========================================================================
+# This configuration defines a complete microservices architecture for
+# an auction platform with the following components:
+# - API Gateway & Load Balancer (Traefik)
+# - Core Business Services (API, Payment, Carfax, Auth, Notification)
+# - Telegram Bot Interface
+# - Message Queue System (RabbitMQ)
+# - Caching Layer (Redis)
+# - Database Layer (PostgreSQL)
+# - Monitoring & Logging Stack (Grafana, Loki, Promtail)
+# ========================================================================
+
+# ========================================================================
+# NETWORK CONFIGURATION
+# ========================================================================
+# Network architecture implements service isolation and secure communication:
+# - traefik_net: Public-facing network for reverse proxy
+# - *_service_net: Service-specific networks for database access
+# - *_rpc_net: Isolated networks for gRPC communication
+# - internal_net: Shared network for inter-service communication
+# - monitoring: Dedicated network for observability stack
+
 networks:
+  # Public-facing network for Traefik reverse proxy
   traefik_net:
     name: traefik_net
     driver: bridge
+
+  # Internal communication network (shared by all services)
   internal_net:
     driver: bridge
+
+  # Service-specific networks for database isolation
   telegram_bot_net:
     driver: bridge
   carfax_service_net:
@@ -17,33 +43,61 @@ networks:
     driver: bridge
   notification_service_net:
     driver: bridge
-  api_net:
-    driver: bridge
   api_service_net:
+    driver: bridge
+
+  # Isolated RPC networks for secure gRPC communication
+  carfax_rpc_net:
+    driver: bridge
+  payment_rpc_net:
+    driver: bridge
+  api_rpc_net:
+    driver: bridge
+
+  # Infrastructure networks
+  adminer_database_net:
+    driver: bridge
+  api_net:
     driver: bridge
   rabbitmq_net:
     driver: bridge
   monitoring:
     driver: bridge
 
+# ========================================================================
+# PERSISTENT VOLUMES
+# ========================================================================
+# Named volumes for data persistence across container restarts
 
-############################
-# GLOBAL VOLUMES
-############################
 volumes:
+  # Reverse proxy & SSL certificates
   traefik_letsencrypt:
-  redis_api_data:
-  pg_data_bot:
-  pg_data_carfax:
-  pg_data_payment:
-  pg_data_auth:
-  pg_data_notification:
-  pg_data_api:
-  rabbitmq_data:
-  redis_auth_data:
-  grafana-storage:
-  loki-data:
 
+  # Database volumes (one per service for isolation)
+  pg_data_bot:          # Telegram bot data
+  pg_data_carfax:       # Carfax service data
+  pg_data_payment:      # Payment processing data
+  pg_data_auth:         # Authentication data
+  pg_data_notification: # Notification service data
+  pg_data_api:          # Main API service data
+
+  # Caching volumes
+  redis_auth_data:      # Auth service cache
+  redis_api_data:       # API service cache
+
+  # Message queue data
+  rabbitmq_data:
+
+  # Monitoring stack volumes
+  grafana-storage:      # Dashboards and configurations
+  loki-data:           # Log storage
+
+# ========================================================================
+# REUSABLE SERVICE TEMPLATES
+# ========================================================================
+# YAML anchors for reducing duplication across similar services
+
+# API Service Template
 x-api-base: &api-base
   image: ivanskrb21/vinaslt_api_service:latest
   depends_on:
@@ -51,10 +105,6 @@ x-api-base: &api-base
       condition: service_healthy
     postgres_api:
       condition: service_healthy
-  networks:
-    - api_net
-    - api_service_net
-    - internal_net
 
 x-api-environment: &api-environment
   DB_HOST: postgres_api
@@ -64,54 +114,107 @@ x-api-environment: &api-environment
   DB_USER: ${API_DB_USER}
   ROOT_PATH: /auction-api
   REDIS_URL: redis://redis_api_service:6379/0
+  GRPC_SERVER_PORT: 50051
   ENVIRONMENT:
   DEBUG:
   AUCTION_API_KEY:
 
+# Payment Service Template
+x-payment-base: &payment-base
+  image: ivanskrb21/vinaslt_payment_service:latest
+  depends_on:
+    postgres_payment:
+      condition: service_healthy
 
+x-payment-environment: &payment-environment
+  CARFAX_SERVICE_URL: http://carfax_service:8001/
+  DB_HOST: postgres_payment
+  DB_PORT: 5432
+  DB_NAME: ${PAYMENT_DB_NAME}
+  DB_PASS: ${PAYMENT_DB_PASS}
+  DB_USER: ${PAYMENT_DB_USER}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+  GRPC_SERVER_PORT: 50052
+  STRIPE_SECRET_KEY:
+  STRIPE_WEBHOOK_SECRET:
+  ENVIRONMENT:
+  DEBUG:
+
+# Carfax Service Template
+x-carfax-base: &carfax-base
+  image: ivanskrb21/vinaslt_carfax_service:latest
+  entrypoint: ["/app/entrypoint.sh"]
+  depends_on:
+    - postgres_carfax
+
+x-carfax-environment: &carfax-environment
+  DB_HOST: postgres_carfax
+  DB_PORT: 5432
+  DB_USER: ${CARFAX_DB_USER}
+  DB_PASS: ${CARFAX_DB_PASS}
+  DB_NAME: ${CARFAX_DB_NAME}
+  ROOT_PATH: /carfax
+  GRPC_SERVER_PORT: 50053
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+  PAYMENT_SERVICE_RPC_URL: payment_rpc_service:50052
+  COMPANY_LINK:
+  CARFAX_API_TOKEN:
+  ENVIRONMENT:
+  DEBUG:
+
+# Standard Health Check Template
 x-healthcheck: &healthcheck
   interval: 30s
   timeout: 10s
   retries: 5
   start_period: 60s
 
+# ========================================================================
+# SERVICES CONFIGURATION
+# ========================================================================
 
 services:
 
-  ############################
-  # REVERSE PROXY & LOAD BALANCER
-  ############################
+  # ======================================================================
+  # 1. REVERSE PROXY & LOAD BALANCER
+  # ======================================================================
+  # Traefik handles incoming requests and routes them to appropriate services
+  # Provides SSL termination and load balancing capabilities
 
   traefik:
     image: traefik:v3.5
     container_name: traefik
     restart: unless-stopped
     command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      - "--entrypoints.web.address=:80"
-      - "--log.level=DEBUG"
+      - "--providers.docker=true"                    # Enable Docker provider
+      - "--providers.docker.exposedbydefault=false"  # Require explicit labels
+      - "--entrypoints.web.address=:80"              # HTTP entrypoint
+      - "--log.level=DEBUG"                          # Detailed logging
     ports:
-      - "80:80"
-      - "8080:8080"
+      - "80:80"      # HTTP traffic
+      - "8080:8080"  # Traefik dashboard
     volumes:
       - ./traefik/dev/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dev/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/dev/logs:/logs
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket access
     networks:
       - traefik_net
 
-  ############################
-  # APPLICATION MICROSERVICES
-  ############################
+  # ======================================================================
+  # 2. CORE BUSINESS MICROSERVICES
+  # ======================================================================
 
-  # Authentication and Authorization Service
+  # ----------------------------------------------------------------------
+  # 2.1 AUTHENTICATION & AUTHORIZATION SERVICE
+  # ----------------------------------------------------------------------
+  # Handles user authentication, JWT tokens, and authorization logic
+
   auth_service:
     image: ivanskrb21/vinaslt_auth_service:latest
     container_name: auth_service
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003", "--log-level", "debug", "--proxy-headers" ]
-    expose: [ "8003" ]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003", "--log-level", "debug", "--proxy-headers"]
+    expose: ["8003"]
     environment:
       - DB_HOST=postgres_auth
       - DB_PORT=5432
@@ -123,6 +226,7 @@ services:
       - ROOT_PATH=/auth
       - ENVIRONMENT
       - RABBITMQ_EXCHANGE_NAME
+      # AWS KMS integration for encryption
       - AWS_ACCESS_KEY_ID
       - AWS_KMS_KEY_ARN
       - AWS_REGION
@@ -133,24 +237,27 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
-    volumes:
-      - ./logs:/app/logs
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:8003/health || exit 1" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:8003/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 60s
     networks:
-      - traefik_net
-      - auth_service_net
-      - internal_net
+      - traefik_net        # Public access via Traefik
+      - auth_service_net   # Database access
+      - internal_net       # Inter-service communication
+
+  # ----------------------------------------------------------------------
+  # 2.2 NOTIFICATION SERVICE
+  # ----------------------------------------------------------------------
+  # Handles email and SMS notifications via Twilio and SMTP
 
   notification_service:
     image: ivanskrb21/vinaslt_notification_service:latest
     container_name: notification_service
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--log-level", "debug", "--proxy-headers"]
-    expose: [ "8004" ]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--log-level", "debug", "--proxy-headers"]
+    expose: ["8004"]
     environment:
       - DB_HOST=postgres_notification
       - DB_PORT=5432
@@ -162,24 +269,23 @@ services:
       - ENVIRONMENT
       - RABBITMQ_EXCHANGE_NAME
       - RABBITMQ_QUEUE_NAME
+      # Twilio configuration for SMS
       - TWILIO_ACCOUNT_SID
       - TWILIO_AUTH_TOKEN
       - TWILIO_PHONE_NUMBER
+      # SMTP configuration for email
       - SENDER_EMAIL
       - SMPT_SERVER
       - SMPT_PORT
       - EMAIL_PASSWORD
-      - ENVIRONMENT
       - DEBUG
     depends_on:
       rabbitmq:
         condition: service_healthy
       postgres_notification:
         condition: service_healthy
-    volumes:
-      - ./logs:/app/logs
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:8004/health || exit 1" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:8004/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -189,119 +295,182 @@ services:
       - notification_service_net
       - internal_net
 
-
-  # Main API Service
+  # ----------------------------------------------------------------------
+  # 2.3 MAIN API SERVICE (HTTP + gRPC)
+  # ----------------------------------------------------------------------
+  # Core auction API handling HTTP requests and business logic
 
   api_service:
     <<: *api-base
     container_name: api_service
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug", "--proxy-headers" ]
-    expose: [ "8000" ]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug", "--proxy-headers"]
+    expose: ["8000"]
     environment:
       <<: *api-environment
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD-SHELL", "curl -f http://localhost:8000/health || exit 1" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+    networks:
+      - api_net            # External API access
+      - api_service_net    # Database and cache access
+      - internal_net       # Inter-service communication
 
+  # API gRPC Service (Isolated for internal communication)
   api_rpc_service:
     <<: *api-base
     container_name: api_rpc_service
-    command: [ "python", "serve_rpc.py" ]
-    expose: [ "50051" ]
+    command: ["python", "serve_rpc.py"]
+    expose: ["50051"]
     environment:
       <<: *api-environment
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD-SHELL", "grpc_health_probe -addr=api_rpc_service:50051" ]
-
-  # Telegram Bot Service
-  bot:
-    image: ivanskrb21/vinaslt_bot:latest
-    container_name: telegram_bot
-    entrypoint: ["/app/entrypoint.sh"]
-    command: ["python3", "main.py"]
-    environment:
-      - API_SERVICE_URL=http://api_service:8000/
-      - PAYMENT_SERVICE_URL=http://payment_service:8002/
-      - CARFAX_SERVICE_URL=http://carfax_service:8001/
-      - DB_HOST=postgres_bot
-      - DB_PORT=5432
-      - DEBUG
-      - DB_NAME=${BOT_DB_NAME}
-      - DB_USER=${BOT_DB_USER}
-      - DB_PASS=${BOT_DB_PASS}
-      - API_BOT_TOKEN
-    depends_on:
-      - api_service
-      - postgres_bot
-    restart: unless-stopped
+      test: ["CMD-SHELL", "grpc_health_probe -addr=api_rpc_service:50051"]
     networks:
-      - telegram_bot_net
-      - internal_net
+      - api_rpc_net        # Isolated gRPC network
+      - api_service_net    # Database and Redis access
+      - internal_net       # Internal services access
 
-  # Carfax Integration Service (Vehicle History Reports)
-  carfax_service:
-    image: ivanskrb21/vinaslt_carfax_service:latest
-    container_name: carfax_service
-    entrypoint: ["/app/entrypoint.sh"]
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "debug"]
-    expose: ["8001"]
-    depends_on:
-      - postgres_carfax
-    environment:
-      - DB_HOST=postgres_carfax
-      - DB_PORT=5432
-      - DB_USER=${CARFAX_DB_USER}
-      - DB_PASS=${CARFAX_DB_PASS}
-      - DB_NAME=${CARFAX_DB_NAME}
-      - CARFAX_API_TOKEN
-      - ENVIRONMENT
-      - DEBUG
-    networks:
-      - carfax_service_net
-      - internal_net
+  # ----------------------------------------------------------------------
+  # 2.4 PAYMENT PROCESSING SERVICE (HTTP + gRPC)
+  # ----------------------------------------------------------------------
+  # Handles payment processing via Stripe integration
 
-  # Payment Processing Service
   payment_service:
-    image: ivanskrb21/vinaslt_payment_service:latest
+    <<: *payment-base
     container_name: payment_service
     entrypoint: ["/app/entrypoint.sh"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "debug", "--proxy-headers"]
     expose: ["8002"]
     environment:
-      - ROOT_PATH=/payment
-      - CARFAX_SERVICE_URL=http://carfax_service:8001/
-      - DB_HOST=postgres_payment
-      - DB_PORT=5432
-      - DB_NAME=${PAYMENT_DB_NAME}
-      - DB_PASS=${PAYMENT_DB_PASS}
-      - DB_USER=${PAYMENT_DB_USER}
-      - STRIPE_SECRET_KEY
-      - STRIPE_WEBHOOK_SECRET
-      - ENVIRONMENT
-      - DEBUG
+      <<: *payment-environment
+      ROOT_PATH: /payment
     depends_on:
       postgres_payment:
         condition: service_healthy
       auth_service:
         condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
     networks:
-      - traefik_net
-      - payment_service_net
+      - traefik_net        # Public access for webhooks
+      - payment_service_net # Database access
+      - internal_net       # Inter-service communication
+
+  # Payment gRPC Service (Isolated for internal communication)
+  payment_rpc_service:
+    <<: *payment-base
+    container_name: payment_rpc_service
+    entrypoint: ["/app/entrypoint.sh"]
+    command: ["python", "serve_rpc.py"]
+    expose: ["50052"]
+    environment:
+      <<: *payment-environment
+    depends_on:
+      postgres_payment:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=payment_rpc_service:50052"]
+    networks:
+      - payment_rpc_net     # Isolated gRPC network
+      - payment_service_net # Database access
+      - internal_net        # Internal services access
+
+  # ----------------------------------------------------------------------
+  # 2.5 CARFAX INTEGRATION SERVICE (HTTP + gRPC)
+  # ----------------------------------------------------------------------
+  # Handles vehicle history reports and Carfax API integration
+
+  carfax_service:
+    <<: *carfax-base
+    container_name: carfax_service
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "debug"]
+    expose: ["8001"]
+    environment:
+      <<: *carfax-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+    networks:
+      - carfax_service_net
       - internal_net
 
-  ############################
-  # MESSAGE QUEUE
-  ############################
+  # Carfax gRPC Service (Isolated for internal communication)
+  carfax_rpc_service:
+    <<: *carfax-base
+    container_name: carfax_rpc_service
+    command: ["python", "serve_rpc.py"]
+    expose: ["50053"]
+    environment:
+      <<: *carfax-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=carfax_rpc_service:50053"]
+    networks:
+      - carfax_rpc_net      # Isolated gRPC network
+      - payment_rpc_net     # Can communicate with payment RPC
+      - carfax_service_net  # Database access
+      - internal_net        # Internal services access
 
-  # RabbitMQ Message Broker
+  # ----------------------------------------------------------------------
+  # 2.6 TELEGRAM BOT SERVICE
+  # ----------------------------------------------------------------------
+  # User interface via Telegram bot for auction interactions
+
+  bot:
+    image: ivanskrb21/vinaslt_bot:latest
+    container_name: telegram_bot
+    command: ["python3", "main.py"]
+    environment:
+      # HTTP service endpoints
+      - API_SERVICE_URL=http://api_service:8000/
+      - PAYMENT_SERVICE_URL=http://payment_service:8002/
+      - CARFAX_SERVICE_URL=http://carfax_service:8001/
+
+      # gRPC service endpoints (for faster internal communication)
+      - RPC_CARFAX_URL=carfax_rpc_service:50053
+      - RPC_API_URL=api_rpc_service:50051
+
+      # Bot database configuration
+      - DB_HOST=postgres_bot
+      - DB_PORT=5432
+      - DB_NAME=${BOT_DB_NAME}
+      - DB_USER=${BOT_DB_USER}
+      - DB_PASS=${BOT_DB_PASS}
+
+      # Bot configuration
+      - SECRET_ADMIN_KEY
+      - API_BOT_TOKEN
+      - DEBUG
+    depends_on:
+      - api_service
+      - postgres_bot
+    restart: unless-stopped
+    networks:
+      - api_rpc_net         # gRPC communication with API
+      - carfax_rpc_net      # gRPC communication with Carfax
+      - telegram_bot_net    # Bot database access
+      - internal_net        # HTTP service communication
+
+  # ======================================================================
+  # 3. MESSAGE QUEUE SYSTEM
+  # ======================================================================
+
+  # ----------------------------------------------------------------------
+  # 3.1 RABBITMQ MESSAGE BROKER
+  # ----------------------------------------------------------------------
+  # Handles asynchronous communication between services
+  # Enables event-driven architecture and job queues
+
   rabbitmq:
     image: rabbitmq:3.12-management
     container_name: rabbitmq
     restart: unless-stopped
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "5672:5672"   # AMQP protocol
+      - "15672:15672" # Management UI
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
@@ -313,17 +482,22 @@ services:
       - rabbitmq_net
       - internal_net
     healthcheck:
-      test: [ "CMD", "rabbitmq-diagnostics", "-q", "ping" ]
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
 
-  ############################
-  # CACHING LAYER
-  ############################
+  # ======================================================================
+  # 4. CACHING LAYER
+  # ======================================================================
 
-  # Redis for Authentication Service
+  # ----------------------------------------------------------------------
+  # 4.1 REDIS INSTANCES (Service-Specific)
+  # ----------------------------------------------------------------------
+  # Separate Redis instances for better isolation and performance
+
+  # Redis for Authentication Service (sessions, tokens)
   redis_auth:
     image: redis:8-alpine
     container_name: redis_auth
@@ -334,13 +508,13 @@ services:
       - internal_net
       - auth_service_net
     healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
 
-  # Redis for API Service
+  # Redis for API Service (application cache, rate limiting)
   redis_api_service:
     image: redis:7-alpine
     container_name: redis_api_service
@@ -350,19 +524,24 @@ services:
     restart: unless-stopped
     networks:
       - api_net
-
+      - api_service_net
     healthcheck:
-      test: [ "CMD", "redis-cli", "--raw", "incr", "ping" ]
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 10s
 
-  ############################
-  # DATABASES
-  ############################
+  # ======================================================================
+  # 5. DATABASE LAYER
+  # ======================================================================
 
-  # PostgreSQL for API Service
+  # ----------------------------------------------------------------------
+  # 5.1 POSTGRESQL DATABASES (Service-Specific)
+  # ----------------------------------------------------------------------
+  # Separate database instances for each service to ensure data isolation
+
+  # Database for Main API Service
   postgres_api:
     image: postgres:17.5
     container_name: postgres_api
@@ -374,15 +553,15 @@ services:
       - POSTGRES_DB=${API_DB_NAME}
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${API_DB_USER} -d ${API_DB_NAME}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${API_DB_USER} -d ${API_DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - api_service_net
+      - adminer_database_net
 
-
-  # PostgreSQL for Authentication Service
+  # Database for Authentication Service
   postgres_auth:
     image: postgres:17.5
     container_name: postgres_auth
@@ -394,14 +573,15 @@ services:
       - POSTGRES_DB=${AUTH_DB_NAME}
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${AUTH_DB_USER} -d ${AUTH_DB_NAME}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_DB_USER} -d ${AUTH_DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - auth_service_net
+      - adminer_database_net
 
-  # PostgreSQL for Notification Service
+  # Database for Notification Service
   postgres_notification:
     image: postgres:17.5
     container_name: postgres_notification
@@ -413,14 +593,15 @@ services:
       - POSTGRES_DB=${NOTIFICATION_DB_NAME}
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER} -d ${NOTIFICATION_DB_NAME}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER} -d ${NOTIFICATION_DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - notification_service_net
+      - adminer_database_net
 
-  # PostgreSQL for Telegram Bot
+  # Database for Telegram Bot
   postgres_bot:
     image: postgres:17.5
     container_name: postgres_bot
@@ -433,8 +614,9 @@ services:
     restart: unless-stopped
     networks:
       - telegram_bot_net
+      - adminer_database_net
 
-  # PostgreSQL for Carfax Service
+  # Database for Carfax Service
   postgres_carfax:
     image: postgres:17.5
     container_name: postgres_carfax
@@ -447,8 +629,9 @@ services:
     restart: unless-stopped
     networks:
       - carfax_service_net
+      - adminer_database_net
 
-  # PostgreSQL for Payment Service
+  # Database for Payment Service
   postgres_payment:
     image: postgres:17.5
     container_name: postgres_payment
@@ -459,7 +642,7 @@ services:
       - POSTGRES_PASSWORD=${PAYMENT_DB_PASS}
       - POSTGRES_DB=${PAYMENT_DB_NAME}
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER} -d ${PAYMENT_DB_NAME}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER} -d ${PAYMENT_DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -468,12 +651,53 @@ services:
     restart: unless-stopped
     networks:
       - payment_service_net
+      - adminer_database_net
 
-  ############################
-  # MONITORING & LOGGING STACK
-  ############################
+  # ======================================================================
+  # 5.2 ADMINER DATABASE MANAGEMENT
+  # ======================================================================
+  adminer:
+    image: adminer:latest
+    container_name: database_adminer
+    restart: unless-stopped
 
-  # Loki - Log Aggregation System
+    ports:
+      - "8090:8080"
+
+    environment:
+      - ADMINER_DEFAULT_SERVER=postgres_api
+      - ADMINER_DESIGN=pepa-linha-dark
+      - ADMINER_PLUGINS=tables-filter tinymce
+
+    networks:
+      - adminer_database_net
+      - traefik_net            # Доступ через reverse proxy
+
+    depends_on:
+      - postgres_api
+      - postgres_auth
+      - postgres_notification
+      - postgres_bot
+      - postgres_carfax
+      - postgres_payment
+
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+
+  # ======================================================================
+  # 6. MONITORING & OBSERVABILITY STACK
+  # ======================================================================
+
+  # ----------------------------------------------------------------------
+  # 6.1 LOG AGGREGATION SYSTEM
+  # ----------------------------------------------------------------------
+
+  # Loki - Centralized log storage and querying
   loki:
     image: grafana/loki:3.5.3
     container_name: loki
@@ -485,14 +709,14 @@ services:
       - monitoring
     restart: unless-stopped
 
-  # Promtail - Log Collector and Shipper
+  # Promtail - Log collection agent (collects from all containers)
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
     volumes:
-      - /var/log:/var/log:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/log:/var/log:ro                                    # System logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro           # Docker API access
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro # Container logs
       - ./promtail-config.yaml:/etc/promtail/config.yml
     command: -config.file=/etc/promtail/config.yml
     networks:
@@ -500,27 +724,66 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
-    user: root
+    user: root  # Required for accessing Docker logs
 
-  # Grafana - Monitoring Dashboard
+  # ----------------------------------------------------------------------
+  # 6.2 MONITORING DASHBOARD
+  # ----------------------------------------------------------------------
 
+  # Grafana - Visualization and alerting platform
   grafana:
     image: grafana/grafana:12.1.1
     container_name: grafana
     environment:
+      # Authentication settings
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
-      # Настройка базового пути для работы через reverse proxy
+
+      # Reverse proxy configuration
       - GF_SERVER_ROOT_URL=http://localhost/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      # Дополнительные настройки для корректной работы
       - GF_SERVER_HTTP_PORT=3000
+
+      # Logging configuration
       - GF_LOG_LEVEL=info
     volumes:
       - grafana-storage:/var/lib/grafana
     networks:
-      - monitoring
-      - traefik_net
+      - monitoring    # Access to Loki for data source
+      - traefik_net   # Public access via reverse proxy
     depends_on:
       - loki
     restart: unless-stopped
+
+# ========================================================================
+# ARCHITECTURE SUMMARY
+# ========================================================================
+#
+# SERVICE PORTS:
+# - Traefik:           80 (HTTP), 8080 (Dashboard)
+# - API Service:       8000 (HTTP), 50051 (gRPC)
+# - Payment Service:   8002 (HTTP), 50052 (gRPC)
+# - Auth Service:      8003 (HTTP)
+# - Notification:      8004 (HTTP)
+# - Carfax Service:    8001 (HTTP), 50053 (gRPC)
+# - RabbitMQ:          5672 (AMQP), 15672 (Management)
+# - Grafana:           3000 (accessible via /grafana/)
+#
+# COMMUNICATION PATTERNS:
+# - HTTP: Public APIs and inter-service REST calls
+# - gRPC: High-performance internal service communication
+# - RabbitMQ: Asynchronous event-driven communication
+# - Redis: Caching and session storage
+#
+# SECURITY FEATURES:
+# - Network isolation between services
+# - Dedicated databases per service
+# - Health checks for all critical services
+# - Environment variable based configuration
+# - AWS KMS integration for encryption
+#
+# MONITORING:
+# - Centralized logging via Loki/Promtail
+# - Real-time dashboards via Grafana
+# - Health checks and automatic restarts
+# ========================================================================
