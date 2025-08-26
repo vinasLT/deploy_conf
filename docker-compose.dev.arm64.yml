@@ -21,6 +21,8 @@ networks:
     driver: bridge
   api_net:
     driver: bridge
+  api_service_net:
+    driver: bridge
   rabbitmq_net:
     driver: bridge
   monitoring:
@@ -37,10 +39,41 @@ volumes:
   pg_data_payment:
   pg_data_auth:
   pg_data_notification:
+  pg_data_api:
   rabbitmq_data:
   redis_auth_data:
   grafana-storage:
-  loki_data:
+  loki-data:
+
+x-api-base: &api-base
+  image: ivanskrb21/vinaslt_api_service:latest
+  depends_on:
+    redis_api_service:
+      condition: service_healthy
+    postgres_api:
+      condition: service_healthy
+  networks:
+    - api_net
+    - api_service_net
+    - internal_net
+
+x-api-environment: &api-environment
+  DB_HOST: postgres_api
+  DB_PORT: 5432
+  DB_NAME: ${API_DB_NAME}
+  DB_PASS: ${API_DB_PASS}
+  DB_USER: ${API_DB_USER}
+  ROOT_PATH: /auction-api
+  REDIS_URL: redis://redis_api_service:6379/0
+  ENVIRONMENT:
+  DEBUG:
+  AUCTION_API_KEY:
+
+x-healthcheck: &healthcheck
+  interval: 30s
+  timeout: 10s
+  retries: 5
+  start_period: 60s
 
 services:
   ############################
@@ -94,7 +127,7 @@ services:
       - DB_HOST=postgres_auth
       - DB_PORT=5432
       - DB_NAME=${AUTH_DB_NAME}
-      - DB_PASSWORD=${AUTH_DB_PASS}
+      - DB_PASS=${AUTH_DB_PASS}
       - DB_USER=${AUTH_DB_USER}
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
       - REDIS_URL=redis://redis_auth:6379
@@ -107,8 +140,10 @@ services:
       - AWS_SECRET_ACCESS_KEY
       - DEBUG
     depends_on:
-      - postgres_auth
-      - rabbitmq
+      postgres_auth:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     volumes:
       - ./logs:/app/logs
     healthcheck:
@@ -149,10 +184,14 @@ services:
       - ROOT_PATH=/notification
       - ENVIRONMENT
       - RABBITMQ_EXCHANGE_NAME
-      - AWS_ACCESS_KEY_ID
-      - AWS_KMS_KEY_ARN
-      - AWS_REGION
-      - AWS_SECRET_ACCESS_KEY
+      - RABBITMQ_QUEUE_NAME
+      - TWILIO_ACCOUNT_SID
+      - TWILIO_AUTH_TOKEN
+      - TWILIO_PHONE_NUMBER
+      - SENDER_EMAIL
+      - SMPT_SERVER
+      - SMPT_PORT
+      - EMAIL_PASSWORD
       - ENVIRONMENT
       - DEBUG
     depends_on:
@@ -174,8 +213,9 @@ services:
       - internal_net
 
   # Main API Service
+
   api_service:
-    image: ivanskrb21/vinaslt_api_service:latest
+    <<: *api-base
     platform: linux/amd64
     container_name: api_service
     command:
@@ -191,16 +231,23 @@ services:
         "--proxy-headers",
       ]
     expose: ["8000"]
-    env_file: [.env]
     environment:
-      - ROOT_PATH=/auction-api
-      - REDIS_URL=redis://redis_api_service:6379/0
-      - ENVIRONMENT
-    depends_on:
-      - redis_api_service
-    networks:
-      - api_net
-      - internal_net
+      <<: *api-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+
+  api_rpc_service:
+    <<: *api-base
+    platform: linux/amd64
+    container_name: api_rpc_service
+    command: ["python", "serve_rpc.py"]
+    expose: ["50051"]
+    environment:
+      <<: *api-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=api_rpc_service:50051"]
 
   # Telegram Bot Service
   bot:
@@ -377,6 +424,26 @@ services:
   # DATABASES
   ############################
 
+  # PostgreSQL for API Service
+  postgres_api:
+    image: postgres:17.5
+    platform: linux/arm64
+    container_name: postgres_api
+    volumes:
+      - pg_data_api:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${API_DB_USER}
+      - POSTGRES_PASSWORD=${API_DB_PASS}
+      - POSTGRES_DB=${API_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${API_DB_USER} -d ${API_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - api_service_net
+
   # PostgreSQL for Authentication Service
   postgres_auth:
     image: postgres:17.5
@@ -480,13 +547,13 @@ services:
 
   # Loki - Log Aggregation System
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.5.3
     platform: linux/arm64
     container_name: loki
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./loki-config.yaml:/etc/loki/local-config.yaml
-      - ./loki-data:/tmp/loki
+      - loki-data:/loki
     networks:
       - monitoring
     restart: unless-stopped
@@ -518,8 +585,10 @@ services:
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
+      # Set base path for working through reverse proxy
       - GF_SERVER_ROOT_URL=http://localhost/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      # Additional settings for correct operation
       - GF_SERVER_HTTP_PORT=3000
       - GF_LOG_LEVEL=info
     volumes:
