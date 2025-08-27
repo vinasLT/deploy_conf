@@ -4,13 +4,13 @@ http:
     api:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/auction-api`)"
-      service: api_service
+      service: api-service
       priority: 100
-      middlewares: [cors]
+      middlewares: [cors, api-strip]
 
     payment-webhook:
       entryPoints: [web]
-      rule: "Host(`localhost`) && Path(`/payment/stripe/webhook`)"
+      rule: "Host(`localhost`) && Path(`/payment/public/stripe/webhook`)"
       service: payment
       priority: 200  # Высокий приоритет для webhook
       middlewares: [payment-strip, cors]
@@ -24,9 +24,9 @@ http:
 
     payment-protected:
       entryPoints: [web]
-      rule: "Host(`localhost`) && PathPrefix(`/payment`)"
+      rule: "Host(`localhost`) && PathPrefix(`/payment/private`)"
       service: payment
-      priority: 50  # Низкий приоритет - срабатывает последним
+      priority: 50
       middlewares: [auth-forward, payment-strip, cors]
 
     # Other services
@@ -51,6 +51,12 @@ http:
       middlewares: [auth-strip, cors]
 
   services:
+
+    api-service:
+      loadBalancer:
+        servers:
+          - url: "http://api_service:8000"
+
     auth:
       loadBalancer:
         servers:
@@ -75,9 +81,12 @@ http:
     # Strip prefix middlewares
 
     api-strip:
+      stripPrefix:
+        prefixes: [ "/auction-api" ]
+
     auth-strip:
       stripPrefix:
-        prefixes: ["/auction-api"]
+        prefixes: [ "/auth" ]
 
 
     payment-strip:

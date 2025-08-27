@@ -1,6 +1,5 @@
 # ========================================================================
-# MICROSERVICES AUCTION PLATFORM - DOCKER COMPOSE CONFIGURATION
-# ARM64 PLATFORM OPTIMIZED VERSION
+# MICROSERVICES AUCTION PLATFORM - DOCKER COMPOSE CONFIGURATION (ARM64)
 # ========================================================================
 # This configuration defines a complete microservices architecture for
 # an auction platform with the following components:
@@ -130,7 +129,6 @@ x-payment-base: &payment-base
       condition: service_healthy
 
 x-payment-environment: &payment-environment
-  CARFAX_SERVICE_URL: http://carfax_service:8001/
   DB_HOST: postgres_payment
   DB_PORT: 5432
   DB_NAME: ${PAYMENT_DB_NAME}
@@ -149,7 +147,10 @@ x-carfax-base: &carfax-base
   platform: linux/arm64
   entrypoint: ["/app/entrypoint.sh"]
   depends_on:
-    - postgres_carfax
+    postgres_carfax:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
 
 x-carfax-environment: &carfax-environment
   DB_HOST: postgres_carfax
@@ -319,7 +320,8 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
     networks:
       - api_net            # External API access
-      - api_service_net    # Database and cache access
+      - api_service_net
+      - traefik_net
       - internal_net       # Inter-service communication
 
   # API gRPC Service (Isolated for internal communication)
@@ -410,6 +412,13 @@ services:
     container_name: carfax_rpc_service
     command: ["python", "serve_rpc.py"]
     expose: ["50053"]
+    depends_on:
+      postgres_carfax:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      payment_rpc_service:
+        condition: service_healthy
     environment:
       <<: *carfax-environment
     healthcheck:
@@ -643,6 +652,12 @@ services:
       - POSTGRES_PASSWORD=${CARFAX_DB_PASS}
       - POSTGRES_DB=${CARFAX_DB_NAME}
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${CARFAX_DB_USER} -d ${CARFAX_DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - carfax_service_net
       - adminer_database_net
@@ -780,7 +795,7 @@ services:
 # ARCHITECTURE SUMMARY
 # ========================================================================
 #
-# PLATFORM: linux/arm64 (Apple Silicon M1/M2/M3, AWS Graviton, etc.)
+# PLATFORM: ARM64 (Apple Silicon M1/M2/M3, ARM64 servers)
 #
 # SERVICE PORTS:
 # - Traefik:           80 (HTTP), 8080 (Dashboard)
@@ -809,4 +824,9 @@ services:
 # - Centralized logging via Loki/Promtail
 # - Real-time dashboards via Grafana
 # - Health checks and automatic restarts
+#
+# ARM64 COMPATIBILITY:
+# - All services configured with platform: linux/arm64
+# - Compatible with Apple Silicon and ARM64 servers
+# - Official ARM64 images used for all components
 # ========================================================================

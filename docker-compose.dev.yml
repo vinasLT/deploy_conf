@@ -127,7 +127,6 @@ x-payment-base: &payment-base
       condition: service_healthy
 
 x-payment-environment: &payment-environment
-  CARFAX_SERVICE_URL: http://carfax_service:8001/
   DB_HOST: postgres_payment
   DB_PORT: 5432
   DB_NAME: ${PAYMENT_DB_NAME}
@@ -145,7 +144,10 @@ x-carfax-base: &carfax-base
   image: ivanskrb21/vinaslt_carfax_service:latest
   entrypoint: ["/app/entrypoint.sh"]
   depends_on:
-    - postgres_carfax
+    postgres_carfax:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
 
 x-carfax-environment: &carfax-environment
   DB_HOST: postgres_carfax
@@ -312,7 +314,8 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
     networks:
       - api_net            # External API access
-      - api_service_net    # Database and cache access
+      - api_service_net
+      - traefik_net
       - internal_net       # Inter-service communication
 
   # API gRPC Service (Isolated for internal communication)
@@ -403,6 +406,13 @@ services:
     container_name: carfax_rpc_service
     command: ["python", "serve_rpc.py"]
     expose: ["50053"]
+    depends_on:
+      postgres_carfax:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      payment_rpc_service:
+        condition: service_healthy
     environment:
       <<: *carfax-environment
     healthcheck:
@@ -627,6 +637,12 @@ services:
       - POSTGRES_PASSWORD=${CARFAX_DB_PASS}
       - POSTGRES_DB=${CARFAX_DB_NAME}
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${CARFAX_DB_USER} -d ${CARFAX_DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - carfax_service_net
       - adminer_database_net
