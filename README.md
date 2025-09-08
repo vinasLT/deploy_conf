@@ -12,7 +12,6 @@ login - ```infisical login``` pick EU region
 
 **START PROJECT**
 
-run ```infisical init```
 
 run ```make up``` in root for MACOS
 

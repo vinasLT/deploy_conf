@@ -29,6 +29,13 @@ http:
       priority: 50
       middlewares: [auth-forward, payment-strip, cors]
 
+    calculator:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/calculator`)"
+      service: calculator
+      priority: 45
+      middlewares: [calculator-strip, cors]
+
     # Other services
     grafana:
       entryPoints: [web]
@@ -62,6 +69,11 @@ http:
         servers:
           - url: "http://auth_service:8003"
 
+    calculator:
+        loadBalancer:
+          servers:
+            - url: "http://calculator_service:8005"
+
     payment:
       loadBalancer:
         servers:
@@ -83,6 +95,10 @@ http:
     api-strip:
       stripPrefix:
         prefixes: [ "/auction-api" ]
+
+    calculator-strip:
+      stripPrefix:
+        prefixes: [ "/calculator" ]
 
     auth-strip:
       stripPrefix:

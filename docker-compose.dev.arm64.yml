@@ -1,5 +1,5 @@
 # ========================================================================
-# MICROSERVICES AUCTION PLATFORM - DOCKER COMPOSE CONFIGURATION (ARM64)
+# MICROSERVICES AUCTION PLATFORM - DOCKER COMPOSE CONFIGURATION
 # ========================================================================
 # This configuration defines a complete microservices architecture for
 # an auction platform with the following components:
@@ -45,6 +45,8 @@ networks:
     driver: bridge
   api_service_net:
     driver: bridge
+  calculator_service_net:
+    driver: bridge
 
   # Isolated RPC networks for secure gRPC communication
   carfax_rpc_net:
@@ -80,10 +82,12 @@ volumes:
   pg_data_auth:         # Authentication data
   pg_data_notification: # Notification service data
   pg_data_api:          # Main API service data
+  pg_data_calculator:   # Calculator service data
 
   # Caching volumes
   redis_auth_data:      # Auth service cache
   redis_api_data:       # API service cache
+  redis_calculator_data: # Calculator service cache
 
   # Message queue data
   rabbitmq_data:
@@ -166,6 +170,30 @@ x-carfax-environment: &carfax-environment
   CARFAX_API_TOKEN:
   ENVIRONMENT:
   DEBUG:
+
+#Calculator Service Template
+x-calculator-base: &calculator-base
+  image: ivanskrb21/vinaslt_calculator_service:latest
+  platform: linux/arm64
+  depends_on:
+    postgres_calculator:
+      condition: service_healthy
+    api_rpc_service:
+      condition: service_healthy
+
+
+x-calculator-environment: &calculator-environment
+  DB_HOST: postgres_calculator
+  DB_PORT: 5432
+  DB_USER: ${CALCULATOR_DB_USER}
+  DB_PASS: ${CALCULATOR_DB_PASS}
+  DB_NAME: ${CALCULATOR_DB_NAME}
+  ROOT_PATH: /calculator
+  REDIS_URL: redis://redis_calculator:6379/0
+  RPC_API_URL: api_rpc_service:50051
+  ENVIRONMENT:
+  DEBUG:
+
 
 # Standard Health Check Template
 x-healthcheck: &healthcheck
@@ -471,6 +499,46 @@ services:
       - telegram_bot_net    # Bot database access
       - internal_net        # HTTP service communication
 
+  # ----------------------------------------------------------------------
+  # 2.7 CALCULATOR SERVICE (HTTP + INITIAL DATA LOAD)
+  # ----------------------------------------------------------------------
+  # Calculate delivery prices for vehicles
+
+  # HTTP Calculator Service
+  calculator_service:
+      <<: *calculator-base
+      container_name: calculator_service
+      command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005", "--log-level", "debug" ]
+      expose: [ "8005" ]
+      environment:
+        <<: *calculator-environment
+      healthcheck:
+        <<: *healthcheck
+        test: ["CMD-SHELL", "curl -f http://localhost:8005/health || exit 1"]
+      networks:
+        - calculator_service_net
+        - internal_net
+        - traefik_net
+        - api_rpc_net
+
+    # Initial Data Load Service (runs once to populate DB)
+  calculator_init_db:
+    <<: *calculator-base
+    container_name: calculator_init_db
+    command: [ "python", "scripts/init_db.py"]
+    environment:
+      <<: *calculator-environment
+    depends_on:
+      calculator_service:
+        condition: service_healthy
+    restart: "no"
+
+    networks:
+      - calculator_service_net
+      - internal_net
+      - api_rpc_net
+
+
   # ======================================================================
   # 3. MESSAGE QUEUE SYSTEM
   # ======================================================================
@@ -545,6 +613,23 @@ services:
     networks:
       - api_net
       - api_service_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  redis_calculator:
+    image: redis:7-alpine
+    platform: linux/arm64
+    container_name: redis_calculator
+    expose: ["6379"]
+    volumes:
+      - redis_calculator_data:/data
+    restart: unless-stopped
+    networks:
+      - calculator_service_net
     healthcheck:
       test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
       interval: 10s
@@ -685,6 +770,28 @@ services:
       - payment_service_net
       - adminer_database_net
 
+  # Database for Calculator Service
+  postgres_calculator:
+    image: postgres:17.5
+    platform: linux/arm64
+    container_name: postgres_calculator
+    volumes:
+      - pg_data_calculator:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${CALCULATOR_DB_USER}
+      - POSTGRES_PASSWORD=${CALCULATOR_DB_PASS}
+      - POSTGRES_DB=${CALCULATOR_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${CALCULATOR_DB_USER} -d ${CALCULATOR_DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - calculator_service_net
+      - adminer_database_net
+
   # ======================================================================
   # 5.2 ADMINER DATABASE MANAGEMENT
   # ======================================================================
@@ -795,8 +902,6 @@ services:
 # ARCHITECTURE SUMMARY
 # ========================================================================
 #
-# PLATFORM: ARM64 (Apple Silicon M1/M2/M3, ARM64 servers)
-#
 # SERVICE PORTS:
 # - Traefik:           80 (HTTP), 8080 (Dashboard)
 # - API Service:       8000 (HTTP), 50051 (gRPC)
@@ -824,9 +929,4 @@ services:
 # - Centralized logging via Loki/Promtail
 # - Real-time dashboards via Grafana
 # - Health checks and automatic restarts
-#
-# ARM64 COMPATIBILITY:
-# - All services configured with platform: linux/arm64
-# - Compatible with Apple Silicon and ARM64 servers
-# - Official ARM64 images used for all components
 # ========================================================================
