@@ -101,6 +101,35 @@ volumes:
 # ========================================================================
 # YAML anchors for reducing duplication across similar services
 
+# Auth Service Template
+x-auth-base: &auth-base
+  image: ivanskrb21/vinaslt_auth_service:latest
+  platform: linux/arm64
+  depends_on:
+    postgres_auth:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+x-auth-environment: &auth-environment
+  DB_HOST: postgres_auth
+  DB_PORT: 5432
+  DB_USER: ${AUTH_DB_USER}
+  DB_PASS: ${AUTH_DB_PASS}
+  DB_NAME: ${AUTH_DB_NAME}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+  REDIS_URL: redis://redis_auth:6379
+  ROOT_PATH: /auth
+  ENVIRONMENT:
+  RABBITMQ_EXCHANGE_NAME:
+  # AWS KMS integration for encryption
+  AWS_ACCESS_KEY_ID:
+  AWS_KMS_KEY_ARN:
+  AWS_REGION:
+  AWS_SECRET_ACCESS_KEY:
+  DEBUG:
+
+
 # API Service Template
 x-api-base: &api-base
   image: ivanskrb21/vinaslt_api_service:latest
@@ -245,43 +274,31 @@ services:
   # Handles user authentication, JWT tokens, and authorization logic
 
   auth_service:
-    image: ivanskrb21/vinaslt_auth_service:latest
-    platform: linux/arm64
+    <<: *auth-base
     container_name: auth_service
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003", "--log-level", "debug", "--proxy-headers"]
-    expose: ["8003"]
+    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003", "--log-level", "debug", "--proxy-headers" ]
+    expose: [ "8003" ]
     environment:
-      - DB_HOST=postgres_auth
-      - DB_PORT=5432
-      - DB_NAME=${AUTH_DB_NAME}
-      - DB_PASS=${AUTH_DB_PASS}
-      - DB_USER=${AUTH_DB_USER}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-      - REDIS_URL=redis://redis_auth:6379
-      - ROOT_PATH=/auth
-      - ENVIRONMENT
-      - RABBITMQ_EXCHANGE_NAME
-      # AWS KMS integration for encryption
-      - AWS_ACCESS_KEY_ID
-      - AWS_KMS_KEY_ARN
-      - AWS_REGION
-      - AWS_SECRET_ACCESS_KEY
-      - DEBUG
-    depends_on:
-      postgres_auth:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
+      <<: *auth-environment
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8003/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+      <<: *healthcheck
+      test: [ "CMD-SHELL", "curl -f http://localhost:8003/health || exit 1" ]
     networks:
       - traefik_net        # Public access via Traefik
       - auth_service_net   # Database access
       - internal_net       # Inter-service communication
+
+  auth_init_db:
+    <<: *auth-base
+    container_name: auth_init_db
+    command: [ "python", "scripts/init_db.py" ]
+    environment:
+      <<: *auth-environment
+    restart: "no"
+    networks:
+      - auth_service_net
+      - internal_net
+
 
   # ----------------------------------------------------------------------
   # 2.2 NOTIFICATION SERVICE
@@ -897,36 +914,3 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
-
-# ========================================================================
-# ARCHITECTURE SUMMARY
-# ========================================================================
-#
-# SERVICE PORTS:
-# - Traefik:           80 (HTTP), 8080 (Dashboard)
-# - API Service:       8000 (HTTP), 50051 (gRPC)
-# - Payment Service:   8002 (HTTP), 50052 (gRPC)
-# - Auth Service:      8003 (HTTP)
-# - Notification:      8004 (HTTP)
-# - Carfax Service:    8001 (HTTP), 50053 (gRPC)
-# - RabbitMQ:          5672 (AMQP), 15672 (Management)
-# - Grafana:           3000 (accessible via /grafana/)
-#
-# COMMUNICATION PATTERNS:
-# - HTTP: Public APIs and inter-service REST calls
-# - gRPC: High-performance internal service communication
-# - RabbitMQ: Asynchronous event-driven communication
-# - Redis: Caching and session storage
-#
-# SECURITY FEATURES:
-# - Network isolation between services
-# - Dedicated databases per service
-# - Health checks for all critical services
-# - Environment variable based configuration
-# - AWS KMS integration for encryption
-#
-# MONITORING:
-# - Centralized logging via Loki/Promtail
-# - Real-time dashboards via Grafana
-# - Health checks and automatic restarts
-# ========================================================================
