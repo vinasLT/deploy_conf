@@ -385,6 +385,25 @@ services:
       - api_service_net    # Database and Redis access
       - internal_net       # Internal services access
 
+  api_init_db:
+    <<: *api-base
+    container_name: api_init_db
+    command: [ "python", "scripts/init_db.py" ]
+    environment:
+      <<: *api-environment
+    depends_on:
+        api_service:
+          condition: service_healthy
+        api_rpc_service:
+          condition: service_healthy
+    restart: "no"
+
+    networks:
+      - api_rpc_net        # Isolated gRPC network
+      - api_service_net    # Database and Redis access
+      - internal_net
+
+
   # ----------------------------------------------------------------------
   # 2.4 PAYMENT PROCESSING SERVICE (HTTP + gRPC)
   # ----------------------------------------------------------------------
