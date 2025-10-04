@@ -232,6 +232,22 @@ x-healthcheck: &healthcheck
 
 services:
 
+  # FRONTEND SERVICES
+
+
+  next:
+    image: timakaa/vinas-frontend:latest
+    container_name: next
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost
+    ports:
+      - "3000:3000"
+    networks:
+      - traefik_net
+
+
+
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
   # ======================================================================
@@ -318,7 +334,7 @@ services:
       # Twilio configuration for SMS
       - TWILIO_ACCOUNT_SID
       - TWILIO_AUTH_TOKEN
-      - TWILIO_PHONE_NUMBER
+      - TWILIO_MESSAGING_SERVICE_SID
       # SMTP configuration for email
       - SENDER_EMAIL
       - SMPT_SERVER
