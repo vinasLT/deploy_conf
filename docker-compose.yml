@@ -1,13 +1,8 @@
-version: "3.9"
-
-############################
-# С Е Т И
-############################
 networks:
   traefik_net:
     name: traefik_net
     driver: bridge
-  internal_net:          # обмен между микросервисами
+  internal_net:
     driver: bridge
   telegram_bot_net:
     driver: bridge
@@ -17,10 +12,9 @@ networks:
     driver: bridge
   api_net:
     driver: bridge
+  db_admin_net:
+    driver: bridge
 
-############################
-# Г Л О Б А Л Ь Н Ы Е  Т О М А
-############################
 volumes:
   traefik_letsencrypt:
   redis_api_data:
@@ -28,79 +22,57 @@ volumes:
   pg_data_carfax:
   pg_data_payment:
 
-
 services:
-
-  ##########################
-  # Traefik
-  ##########################
   traefik:
     image: traefik:v3.2
     container_name: traefik
     restart: unless-stopped
-
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"    # Dashboard для отладки
-
+      - "8080:8080"
     volumes:
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./letsencrypt:/letsencrypt
       - ./traefik/logs:/logs
       - /var/run/docker.sock:/var/run/docker.sock:ro
-
     networks:
       - traefik_net
-
     environment:
       - TRAEFIK_LOG_LEVEL=DEBUG
-
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_net"
 
-  ##########################
-  # Telegram-бот
-  ##########################
   bot:
     image: ivanskrb21/vinaslt_bot:latest
     container_name: telegram_bot
     entrypoint: ["/app/entrypoint.sh"]
     command: ["python3", "main.py"]
-
     env_file: [.env]
     environment:
       - API_SERVICE_URL=http://api_service:8000/
       - PAYMENT_SERVICE_URL=http://payment_service:8002/
       - CARFAX_SERVICE_URL=http://carfax_service:8001/
-
     depends_on:
       - api_service
       - postgres_bot
-
     restart: unless-stopped
     networks:
       - telegram_bot_net
       - internal_net
 
-  ##########################
-  # API-сервис (VIN lookup)
-  ##########################
   api_service:
     image: ivanskrb21/vinaslt_api_service:latest
     container_name: api_service
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]
-
-    expose: ["8000"]
-
+    expose:
+      - "8000"
     env_file: [.env]
     environment:
       - REDIS_URL=redis://redis_api_service:6379/0
-
     depends_on:
       - redis_api_service
-
     networks:
       - api_net
       - internal_net
@@ -108,7 +80,8 @@ services:
   redis_api_service:
     image: redis:7-alpine
     container_name: redis_api_service
-    expose: ["6379"]
+    expose:
+      - "6379"
     volumes:
       - redis_api_data:/data
     restart: unless-stopped
@@ -127,23 +100,18 @@ services:
     restart: unless-stopped
     networks:
       - telegram_bot_net
+      - db_admin_net
 
-  ##########################
-  # Carfax-сервис
-  ##########################
   carfax_service:
     image: ivanskrb21/vinaslt_carfax_service:latest
     container_name: carfax_service
     entrypoint: ["/app/entrypoint.sh"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "debug"]
-
-    expose: ["8001"]
-
+    expose:
+      - "8001"
     env_file: [.env]
-
     depends_on:
       - postgres_carfax
-
     networks:
       - carfax_service_net
       - internal_net
@@ -160,47 +128,44 @@ services:
     restart: unless-stopped
     networks:
       - carfax_service_net
+      - db_admin_net
 
-  ##########################
-  # Payment-сервис
-  ##########################
   payment_service:
     image: ivanskrb21/vinaslt_payment_service:latest
     container_name: payment_service
     entrypoint: ["/app/entrypoint.sh"]
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "debug"]
-
-    expose: ["8002"]
-
+    expose:
+      - "8002"
     env_file: [.env]
     environment:
       - CARFAX_SERVICE_URL=http://carfax_service:8001/
-
     depends_on:
       - postgres_payment
-
     networks:
-      - traefik_net          # публичный трафик
-      - payment_service_net  # приватная БД
-      - internal_net         # сервис-to-сервис
-
+      - traefik_net
+      - payment_service_net
+      - internal_net
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_net"
-
-      # HTTPS-роутер
       - "traefik.http.routers.payment.rule=Host(`api.vinas.lt`) && PathPrefix(`/payment`)"
       - "traefik.http.routers.payment.entrypoints=websecure"
       - "traefik.http.routers.payment.tls=true"
       - "traefik.http.routers.payment.tls.certresolver=letsencrypt"
       - "traefik.http.routers.payment.middlewares=payment-strip"
       - "traefik.http.routers.payment.service=payment"
-
-      # Сервис
       - "traefik.http.services.payment.loadbalancer.server.port=8002"
-
-      # Middleware для удаления префикса
       - "traefik.http.middlewares.payment-strip.stripprefix.prefixes=/payment"
+
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    networks:
+      - db_admin_net
 
   postgres_payment:
     image: postgres:15
@@ -211,7 +176,9 @@ services:
       - POSTGRES_USER=${PAYMENT_DB_USER}
       - POSTGRES_PASSWORD=${PAYMENT_DB_PASS}
       - POSTGRES_DB=${PAYMENT_DB_NAME}
-    expose: ["5432"]
+    expose:
+      - "5432"
     restart: unless-stopped
     networks:
       - payment_service_net
+      - db_admin_net
