@@ -43,6 +43,13 @@ http:
       service: grafana
       priority: 100
 
+    adminer:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/adminer`)"
+      service: adminer
+      priority: 95
+      middlewares: [adminer-strip, cors]
+
     notification:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/notification`)"
@@ -89,6 +96,11 @@ http:
         servers:
           - url: "http://grafana:3000"
 
+    adminer:
+      loadBalancer:
+        servers:
+          - url: "http://database_adminer:8080"
+
   middlewares:
     # Strip prefix middlewares
 
@@ -116,6 +128,10 @@ http:
     rabbitmq-strip:
       stripPrefix:
         prefixes: ["/rabbitmq"]
+
+    adminer-strip:
+      stripPrefix:
+        prefixes: ["/adminer"]
 
     cors:
       headers:
