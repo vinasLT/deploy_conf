@@ -4,8 +4,10 @@ http:
     frontend:
       entryPoints: [websecure]
       rule: "Host(`demo.vinas.lt`)"
-      service: frontend
+      service: frontend@docker
       priority: 10
+      tls:
+        certResolver: letsencrypt
 
     api:
       entryPoints: [websecure]
@@ -13,6 +15,8 @@ http:
       service: api-service
       priority: 100
       middlewares: [cors, api-strip]
+      tls:
+        certResolver: letsencrypt
 
     payment-webhook:
       entryPoints: [websecure]
@@ -20,6 +24,8 @@ http:
       service: payment
       priority: 200  # Stripe webhook requires highest precedence
       middlewares: [payment-strip, cors]
+      tls:
+        certResolver: letsencrypt
 
     payment-public:
       entryPoints: [websecure]
@@ -27,6 +33,8 @@ http:
       service: payment
       priority: 190
       middlewares: [payment-strip, cors]
+      tls:
+        certResolver: letsencrypt
 
     payment-protected:
       entryPoints: [websecure]
@@ -34,6 +42,8 @@ http:
       service: payment
       priority: 50
       middlewares: [auth-forward, payment-strip, cors]
+      tls:
+        certResolver: letsencrypt
 
     calculator:
       entryPoints: [websecure]
@@ -41,6 +51,8 @@ http:
       service: calculator
       priority: 45
       middlewares: [calculator-strip, cors]
+      tls:
+        certResolver: letsencrypt
 
     # Other services
     grafana:
@@ -48,6 +60,8 @@ http:
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/grafana`)"
       service: grafana
       priority: 100
+      tls:
+        certResolver: letsencrypt
 
     adminer:
       entryPoints: [websecure]
@@ -55,6 +69,8 @@ http:
       service: adminer
       priority: 95
       middlewares: [adminer-strip, cors]
+      tls:
+        certResolver: letsencrypt
 
     notification:
       entryPoints: [websecure]
@@ -62,6 +78,8 @@ http:
       service: notification
       priority: 90
       middlewares: [notification-strip, cors]
+      tls:
+        certResolver: letsencrypt
 
     auth:
       entryPoints: [websecure]
@@ -69,13 +87,11 @@ http:
       service: auth
       priority: 80
       middlewares: [auth-strip, cors]
+      tls:
+        certResolver: letsencrypt
 
   services:
 
-    frontend:
-      loadBalancer:
-        servers:
-          - url: "http://frontend:3000"
     api-service:
       loadBalancer:
         servers:
@@ -179,4 +195,3 @@ http:
           - X-User-Role
           - X-Token-Expires
           - X-Permissions
-

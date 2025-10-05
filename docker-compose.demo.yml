@@ -72,9 +72,7 @@ networks:
 # Named volumes for data persistence across container restarts
 
 volumes:
-  # Reverse proxy & SSL certificates
-  traefik_letsencrypt:
-
+  # Reverse proxy & SSL certificates stored via ./letsencrypt/acme.json bind mount
   # Database volumes (one per service for isolation)
   pg_data_bot:          # Telegram bot data
   pg_data_carfax:       # Carfax service data
@@ -243,6 +241,10 @@ services:
       - traefik_net
     environment:
       - NEXT_PUBLIC_API_URL=https://api.vinas.lt/
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      - "traefik.docker.network=traefik_net"
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
@@ -268,7 +270,7 @@ services:
       - ./traefik/demo/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/demo/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/demo/logs:/logs
-      - traefik_letsencrypt:/letsencrypt
+      - ./letsencrypt/acme.json:/letsencrypt/acme.json
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket access
     networks:
       - traefik_net
