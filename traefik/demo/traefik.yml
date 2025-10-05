@@ -16,14 +16,6 @@ entryPoints:
       tls:
         certResolver: letsencrypt
 
-# Провайдеры
-providers:
-  docker:
-    endpoint: "unix:///var/run/docker.sock"
-    exposedByDefault: false
-    network: traefik_net
-    watch: true
-
 # Сертификаты Let's Encrypt
 certificatesResolvers:
   letsencrypt:
