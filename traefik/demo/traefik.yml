@@ -1,13 +1,6 @@
-log:
-  level: DEBUG
-  filePath: /logs/traefik.log
-
-accessLog:
-  filePath: /logs/access.log
 
 api:
   dashboard: true
-  insecure: false  # dashboard exposed only through configured entrypoints
 
 entryPoints:
   web:
