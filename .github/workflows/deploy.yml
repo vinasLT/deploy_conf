@@ -1,106 +1,49 @@
-name: Deploy Config to Server
+name: Deploy to VPS
 
 on:
   push:
-    branches:
-      - main
+    branches: [ demo ]
   workflow_dispatch:
 
 jobs:
-  deploy_config_to_server:
+  deploy:
+    name: Deploy to VPS Server
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate .env from template
-        run: |
-          set -e
-          cp .env.template .env
-
-          escape() {
-            printf '%s' "$1" | sed -e 's/[\/&\\]/\\&/g'
-          }
-
-          sed -i "s|{{API_BOT_TOKEN}}|$(escape '${{ secrets.API_BOT_TOKEN }}')|g" .env
-          sed -i "s|{{SECRET_ADMIN_KEY}}|$(escape '${{ secrets.SECRET_ADMIN_KEY }}')|g" .env
-        
-          sed -i "s|{{CARFAX_API_TOKEN}}|$(escape '${{ secrets.CARFAX_API_TOKEN }}')|g" .env
-        
-          sed -i "s|{{STRIPE_SECRET_KEY}}|$(escape '${{ secrets.STRIPE_SECRET_KEY }}')|g" .env
-          sed -i "s|{{STRIPE_WEBHOOK_SECRET}}|$(escape '${{ secrets.STRIPE_WEBHOOK_SECRET }}')|g" .env
-        
-          sed -i "s|{{AUCTION_API_KEY}}|$(escape '${{ secrets.AUCTION_API_KEY }}')|g" .env
-        
-          sed -i "s|{{API_REDIS_PORT}}|$(escape '${{ secrets.API_REDIS_PORT }}')|g" .env
-        
-          sed -i "s|{{BOT_DB_USER}}|$(escape '${{ secrets.BOT_DB_USER }}')|g" .env
-          sed -i "s|{{BOT_DB_PASS}}|$(escape '${{ secrets.BOT_DB_PASS }}')|g" .env
-          sed -i "s|{{BOT_DB_NAME}}|$(escape '${{ secrets.BOT_DB_NAME }}')|g" .env
-          sed -i "s|{{BOT_DB_HOST}}|$(escape '${{ secrets.BOT_DB_HOST }}')|g" .env
-          sed -i "s|{{BOT_DB_PORT}}|$(escape '${{ secrets.BOT_DB_PORT }}')|g" .env
-        
-          sed -i "s|{{CARFAX_DB_USER}}|$(escape '${{ secrets.CARFAX_DB_USER }}')|g" .env
-          sed -i "s|{{CARFAX_DB_PASS}}|$(escape '${{ secrets.CARFAX_DB_PASS }}')|g" .env
-          sed -i "s|{{CARFAX_DB_NAME}}|$(escape '${{ secrets.CARFAX_DB_NAME }}')|g" .env
-          sed -i "s|{{CARFAX_DB_HOST}}|$(escape '${{ secrets.CARFAX_DB_HOST }}')|g" .env
-          sed -i "s|{{CARFAX_DB_PORT}}|$(escape '${{ secrets.CARFAX_DB_PORT }}')|g" .env
-        
-          sed -i "s|{{PAYMENT_DB_USER}}|$(escape '${{ secrets.PAYMENT_DB_USER }}')|g" .env
-          sed -i "s|{{PAYMENT_DB_PASS}}|$(escape '${{ secrets.PAYMENT_DB_PASS }}')|g" .env
-          sed -i "s|{{PAYMENT_DB_NAME}}|$(escape '${{ secrets.PAYMENT_DB_NAME }}')|g" .env
-          sed -i "s|{{PAYMENT_DB_HOST}}|$(escape '${{ secrets.PAYMENT_DB_HOST }}')|g" .env
-          sed -i "s|{{PAYMENT_DB_PORT}}|$(escape '${{ secrets.PAYMENT_DB_PORT }}')|g" .env
-
-      - name: Set up SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
-
-      - name: Upload .env to server
-        run: |
-          scp -i ~/.ssh/id_rsa .env ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/srv/vinaslt/deploy_conf/.env
-
-      - name: SSH into server and restart containers
+      - name: Deploy to server via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          INFISICAL_CLIENT_ID: ${{ secrets.INFISICAL_CLIENT_ID }}
+          INFISICAL_CLIENT_SECRET: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+          INFISICAL_PROJECT_ID: ${{ secrets.INFISICAL_PROJECT_ID }}
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          envs: TELEGRAM_BOT_TOKEN,TG_USER_ID
+          port: 22
+          timeout: 300s
+          command_timeout: 600s
+
+          envs: INFISICAL_CLIENT_ID,INFISICAL_CLIENT_SECRET,INFISICAL_PROJECT_ID
           script: |
             set -e
-
-            cd /srv/vinaslt/deploy_conf
-
-            echo "🔄 Pulling latest changes from main branch..."
-            git fetch origin main
-            git reset --hard origin/main
-
-            echo "🐳 Restarting Docker containers..."
-            docker compose down
-            docker compose --env-file .env up -d --build
-
-            echo "⏳ Waiting for containers to stabilize..."
-            sleep 10
-
-            echo "🩺 Performing health check..."
-            if ! docker compose ps | grep -q "Up"; then
-              echo "❌ Containers failed to start properly. Rolling back..."
-              git reset --hard HEAD@{1}
-              docker compose down
-              docker compose --env-file .env up -d --build
-
-              curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-                   -d chat_id=${TG_USER_ID} \
-                   -d text="❌ Config deployment failed. Rolled back."
-              exit 1
+            if ! command -v infisical >/dev/null 2>&1; then
+              curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
+              sudo apt-get update
+              sudo apt-get install -y infisical
             fi
-
-            echo "✅ All containers are running successfully!"
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-                 -d chat_id=${TG_USER_ID} \
-                 -d text="✅ Config deployment completed successfully!"
+            cd /srv/vinas/deploy_conf || exit 1
+            export INFISICAL_TOKEN=$(infisical login --method=universal-auth --client-id="$INFISICAL_CLIENT_ID" --client-secret="$INFISICAL_CLIENT_SECRET" --domain=https://eu.infisical.com --silent --plain)
+            if [ -z "$INFISICAL_TOKEN" ]; then
+              echo "Infisical login failed or returned empty token"
+              exit 2
+            fi
+            git pull origin main
+            docker compose pull
+            
+            infisical run --projectId="$INFISICAL_PROJECT_ID" --env=prod --token="$INFISICAL_TOKEN" --domain=https://eu.infisical.com -- docker compose up -d --build
+            echo "Deployment completed successfully!"
