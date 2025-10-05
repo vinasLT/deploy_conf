@@ -236,6 +236,7 @@ services:
   frontend:
     image: timakaa/vinas-frontend:latest
     container_name: frontend
+    platform: linux/amd64
     restart: unless-stopped
     expose:
       - 3000
