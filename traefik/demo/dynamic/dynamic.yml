@@ -4,7 +4,7 @@ http:
     frontend:
       entryPoints: [websecure]
       rule: "Host(`demo.vinas.lt`)"
-      service: frontend@docker
+      service: frontend
       priority: 10
       tls:
         certResolver: letsencrypt
@@ -14,45 +14,45 @@ http:
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/auction-api`)"
       service: api-service
       priority: 100
-      middlewares: [cors, api-strip]
       tls:
         certResolver: letsencrypt
+      middlewares: [cors, api-strip]
 
     payment-webhook:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && Path(`/payment/public/stripe/webhook`)"
       service: payment
       priority: 200  # Stripe webhook requires highest precedence
-      middlewares: [payment-strip, cors]
       tls:
         certResolver: letsencrypt
+      middlewares: [payment-strip, cors]
 
     payment-public:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && (Path(`/payment/docs`) || PathPrefix(`/payment/docs/`) || Path(`/payment/openapi.json`))"
       service: payment
       priority: 190
-      middlewares: [payment-strip, cors]
       tls:
         certResolver: letsencrypt
+      middlewares: [payment-strip, cors]
 
     payment-protected:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/payment/private`)"
       service: payment
       priority: 50
-      middlewares: [auth-forward, payment-strip, cors]
       tls:
         certResolver: letsencrypt
+      middlewares: [auth-forward, payment-strip, cors]
 
     calculator:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/calculator`)"
       service: calculator
       priority: 45
-      middlewares: [calculator-strip, cors]
       tls:
         certResolver: letsencrypt
+      middlewares: [calculator-strip, cors]
 
     # Other services
     grafana:
@@ -68,30 +68,34 @@ http:
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/adminer`)"
       service: adminer
       priority: 95
-      middlewares: [adminer-strip, cors]
       tls:
         certResolver: letsencrypt
+      middlewares: [adminer-strip, cors]
 
     notification:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/notification`)"
       service: notification
       priority: 90
-      middlewares: [notification-strip, cors]
       tls:
         certResolver: letsencrypt
+      middlewares: [notification-strip, cors]
 
     auth:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/auth`)"
       service: auth
       priority: 80
-      middlewares: [auth-strip, cors]
       tls:
         certResolver: letsencrypt
+      middlewares: [auth-strip, cors]
 
   services:
 
+    frontend:
+      loadBalancer:
+        servers:
+          - url: "http://frontend:3000"
     api-service:
       loadBalancer:
         servers:
@@ -195,3 +199,4 @@ http:
           - X-User-Role
           - X-Token-Expires
           - X-Permissions
+

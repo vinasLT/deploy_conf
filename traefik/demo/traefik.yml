@@ -14,10 +14,6 @@ entryPoints:
     http:
       tls:
         certResolver: letsencrypt
-        domains:
-          - main: api.vinas.lt
-            sans:
-              - demo.vinas.lt
 
 providers:
   docker:
