@@ -25,5 +25,7 @@ certificatesResolvers:
     acme:
       email: peyrovskaaa@gmail.com
       storage: /letsencrypt/acme.json
+      keyType: EC256
+      caServer: https://acme-v02.api.letsencrypt.org/directory
       httpChallenge:
         entryPoint: web
