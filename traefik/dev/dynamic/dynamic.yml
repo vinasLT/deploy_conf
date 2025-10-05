@@ -8,6 +8,12 @@ http:
       priority: 100
       middlewares: [cors, api-strip]
 
+    frontend:
+      entryPoints: [ websecure ]
+      rule: "Host(`demo.vinas.lt`)"
+      service: frontend
+      priority: 10
+
     payment-webhook:
       entryPoints: [web]
       rule: "Host(`localhost`) && Path(`/payment/public/stripe/webhook`)"

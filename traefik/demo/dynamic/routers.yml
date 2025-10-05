@@ -5,7 +5,6 @@ http:
       rule: "Host(`demo.vinas.lt`)"
       service: frontend
       priority: 10
-      tls: {}
 
     api:
       entryPoints: [websecure]
