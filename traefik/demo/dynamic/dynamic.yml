@@ -18,7 +18,7 @@ http:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && Path(`/payment/public/stripe/webhook`)"
       service: payment
-      priority: 200  # Высокий приоритет для webhook
+      priority: 200  # Stripe webhook requires highest precedence
       middlewares: [payment-strip, cors]
 
     payment-public:
@@ -87,9 +87,9 @@ http:
           - url: "http://auth_service:8003"
 
     calculator:
-        loadBalancer:
-          servers:
-            - url: "http://calculator_service:8005"
+      loadBalancer:
+        servers:
+          - url: "http://calculator_service:8005"
 
     payment:
       loadBalancer:

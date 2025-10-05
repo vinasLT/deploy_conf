@@ -1,4 +1,3 @@
-
 api:
   dashboard: true
 
@@ -23,6 +22,9 @@ entryPoints:
 providers:
   docker:
     exposedByDefault: false
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
 
 certificatesResolvers:
   letsencrypt:
@@ -31,3 +33,4 @@ certificatesResolvers:
       storage: /letsencrypt/acme.json
       httpChallenge:
         entryPoint: web
+
