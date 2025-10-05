@@ -81,7 +81,7 @@ http:
     frontend:
       loadBalancer:
         servers:
-          - url: "http://frontend:3001"
+          - url: "http://frontend:3000"
 
     api-service:
       loadBalancer:
@@ -111,7 +111,7 @@ http:
     grafana:
       loadBalancer:
         servers:
-          - url: "http://grafana:3000"
+          - url: "http://grafana:3001"
 
     adminer:
       loadBalancer:

@@ -238,7 +238,7 @@ services:
     container_name: frontend
     restart: unless-stopped
     expose:
-      - 3001:3000
+      - 3000
     networks:
       - traefik_net
     environment:
@@ -913,7 +913,7 @@ services:
       # Reverse proxy configuration
       - GF_SERVER_ROOT_URL=http://localhost/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      - GF_SERVER_HTTP_PORT=3000
+      - GF_SERVER_HTTP_PORT=3001
 
       # Logging configuration
       - GF_LOG_LEVEL=info
