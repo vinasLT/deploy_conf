@@ -53,13 +53,13 @@ http:
       priority: 100
       tls: {}
 
-    adminer:
-      entryPoints: [websecure]
-      rule: "Host(`api.vinas.lt`) && PathPrefix(`/adminer`)"
-      service: adminer
-      priority: 95
-      tls: {}
-      middlewares: [adminer-strip, cors]
+    routers:
+      adminer:
+        entryPoints: [ websecure ]
+        rule: "Host(`adminer.vinas.lt`)"
+        service: adminer
+        priority: 100
+        tls: { }
 
     notification:
       entryPoints: [websecure]
