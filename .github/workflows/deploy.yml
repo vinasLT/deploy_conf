@@ -42,7 +42,7 @@ jobs:
               echo "Infisical login failed or returned empty token"
               exit 2
             fi
-            git pull origin main
+            git pull origin demo
             docker compose pull
             
             infisical run --projectId="$INFISICAL_PROJECT_ID" --env=prod --token="$INFISICAL_TOKEN" --domain=https://eu.infisical.com -- docker compose up -d --build
