@@ -53,13 +53,13 @@ http:
       priority: 100
       tls: {}
 
-    routers:
-      adminer:
-        entryPoints: [ websecure ]
-        rule: "Host(`adminer.vinas.lt`)"
-        service: adminer
-        priority: 100
-        tls: { }
+
+    adminer:
+      entryPoints: [ websecure ]
+      rule: "Host(`adminer.vinas.lt`)"
+      service: adminer
+      priority: 100
+      tls: { }
 
     notification:
       entryPoints: [websecure]
@@ -142,10 +142,6 @@ http:
     rabbitmq-strip:
       stripPrefix:
         prefixes: ["/rabbitmq"]
-
-    adminer-strip:
-      stripPrefix:
-        prefixes: ["/adminer"]
 
     cors:
       headers:

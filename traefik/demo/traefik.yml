@@ -4,6 +4,16 @@
 log:
   level: DEBUG
 
+
+# Логи доступа
+accessLog:
+  filePath: /logs/access.log
+
+# API и Dashboard
+api:
+  dashboard: true
+  insecure: true  # Для отладки
+
 # Точки входа
 entryPoints:
   web:
@@ -15,6 +25,14 @@ entryPoints:
     http:
       tls:
         certResolver: letsencrypt
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+  docker:
+    exposedByDefault: false
+    network: traefik_net
 
 # Сертификаты Let's Encrypt
 certificatesResolvers:
@@ -29,11 +47,3 @@ certificatesResolvers:
       caServer: https://acme-v02.api.letsencrypt.org/directory
       httpChallenge:
         entryPoint: web
-
-providers:
-  file:
-    directory: /etc/traefik/dynamic
-    watch: true
-  docker:
-    exposedByDefault: false
-    network: traefik_net
