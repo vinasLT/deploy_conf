@@ -1,0 +1,40 @@
+log:
+  level: DEBUG
+  filePath: /logs/traefik.log
+
+accessLog:
+  filePath: /logs/access.log
+
+api:
+  dashboard: true
+  insecure: false  # dashboard exposed only through configured entrypoints
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+    http:
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: api.vinas.lt
+            sans:
+              - demo.vinas.lt
+
+providers:
+  docker:
+    exposedByDefault: false
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: peyrovskaaa@gmail.com
+      storage: /letsencrypt/acme.json
+      httpChallenge:
+        entryPoint: web
