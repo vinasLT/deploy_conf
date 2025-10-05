@@ -45,5 +45,7 @@ jobs:
             git pull origin demo
             docker compose -f docker-compose.demo.yml pull
             
+            docker compose -f docker-compose.demo.yml down
+            
             infisical run --projectId="$INFISICAL_PROJECT_ID" --env=prod --token="$INFISICAL_TOKEN" --domain=https://eu.infisical.com -- docker compose -f docker-compose.demo.yml  up  -d --build
             echo "Deployment completed successfully!"

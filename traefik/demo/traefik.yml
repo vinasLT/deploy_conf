@@ -1,6 +1,9 @@
 api:
   dashboard: true
 
+log:
+  level: DEBUG
+
 entryPoints:
   web:
     address: ":80"
@@ -29,4 +32,3 @@ certificatesResolvers:
       storage: /letsencrypt/acme.json
       httpChallenge:
         entryPoint: web
-

@@ -1,30 +1,26 @@
 http:
   routers:
-
     frontend:
       entryPoints: [websecure]
       rule: "Host(`demo.vinas.lt`)"
       service: frontend
       priority: 10
-      tls:
-        certResolver: letsencrypt
+      tls: {}
 
     api:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/auction-api`)"
       service: api-service
       priority: 100
-      tls:
-        certResolver: letsencrypt
+      tls: {}
       middlewares: [cors, api-strip]
 
     payment-webhook:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && Path(`/payment/public/stripe/webhook`)"
       service: payment
-      priority: 200  # Stripe webhook requires highest precedence
-      tls:
-        certResolver: letsencrypt
+      priority: 200
+      tls: {}
       middlewares: [payment-strip, cors]
 
     payment-public:
@@ -32,8 +28,7 @@ http:
       rule: "Host(`api.vinas.lt`) && (Path(`/payment/docs`) || PathPrefix(`/payment/docs/`) || Path(`/payment/openapi.json`))"
       service: payment
       priority: 190
-      tls:
-        certResolver: letsencrypt
+      tls: {}
       middlewares: [payment-strip, cors]
 
     payment-protected:
@@ -41,8 +36,7 @@ http:
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/payment/private`)"
       service: payment
       priority: 50
-      tls:
-        certResolver: letsencrypt
+      tls: {}
       middlewares: [auth-forward, payment-strip, cors]
 
     calculator:
@@ -50,26 +44,22 @@ http:
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/calculator`)"
       service: calculator
       priority: 45
-      tls:
-        certResolver: letsencrypt
+      tls: {}
       middlewares: [calculator-strip, cors]
 
-    # Other services
     grafana:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/grafana`)"
       service: grafana
       priority: 100
-      tls:
-        certResolver: letsencrypt
+      tls: {}
 
     adminer:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/adminer`)"
       service: adminer
       priority: 95
-      tls:
-        certResolver: letsencrypt
+      tls: {}
       middlewares: [adminer-strip, cors]
 
     notification:
@@ -77,8 +67,7 @@ http:
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/notification`)"
       service: notification
       priority: 90
-      tls:
-        certResolver: letsencrypt
+      tls: {}
       middlewares: [notification-strip, cors]
 
     auth:
@@ -86,16 +75,15 @@ http:
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/auth`)"
       service: auth
       priority: 80
-      tls:
-        certResolver: letsencrypt
+      tls: {}
       middlewares: [auth-strip, cors]
 
   services:
-
     frontend:
       loadBalancer:
         servers:
           - url: "http://frontend:3000"
+
     api-service:
       loadBalancer:
         servers:
@@ -132,20 +120,17 @@ http:
           - url: "http://database_adminer:8080"
 
   middlewares:
-    # Strip prefix middlewares
-
     api-strip:
       stripPrefix:
-        prefixes: [ "/auction-api" ]
+        prefixes: ["/auction-api"]
 
     calculator-strip:
       stripPrefix:
-        prefixes: [ "/calculator" ]
+        prefixes: ["/calculator"]
 
     auth-strip:
       stripPrefix:
-        prefixes: [ "/auth" ]
-
+        prefixes: ["/auth"]
 
     payment-strip:
       stripPrefix:
@@ -165,38 +150,16 @@ http:
 
     cors:
       headers:
-        accessControlAllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - OPTIONS
-        accessControlAllowOriginList:
-          - "*"
-        accessControlAllowHeaders:
-          - "Content-Type"
-          - "Authorization"
-          - "X-Requested-With"
-        accessControlExposeHeaders:
-          - "X-Total-Count"
+        accessControlAllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
+        accessControlAllowOriginList: ["*"]
+        accessControlAllowHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
+        accessControlExposeHeaders: ["X-Total-Count"]
         accessControlAllowCredentials: true
         accessControlMaxAge: 86400
 
-    # Auth forward middleware
     auth-forward:
       forwardAuth:
         address: "http://auth_service:8003/v1/verify"
         trustForwardHeader: true
-        authRequestHeaders:
-          - Authorization
-          - Cookie
-          - X-Forwarded-Method
-          - X-Forwarded-Host
-          - X-Forwarded-Uri
-        authResponseHeaders:
-          - X-User-ID
-          - X-User-Email
-          - X-User-Role
-          - X-Token-Expires
-          - X-Permissions
-
+        authRequestHeaders: [Authorization, Cookie, X-Forwarded-Method, X-Forwarded-Host, X-Forwarded-Uri]
+        authResponseHeaders: [X-User-ID, X-User-Email, X-User-Role, X-Token-Expires, X-Permissions]
