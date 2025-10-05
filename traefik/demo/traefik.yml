@@ -3,16 +3,6 @@
 # Логирование
 log:
   level: DEBUG
-  filePath: /logs/traefik.log
-
-# Логи доступа
-accessLog:
-  filePath: /logs/access.log
-
-# API и Dashboard
-api:
-  dashboard: true
-  insecure: true  # Для отладки
 
 # Точки входа
 entryPoints:
