@@ -81,7 +81,7 @@ http:
     frontend:
       loadBalancer:
         servers:
-          - url: "http://frontend:3000"
+          - url: "http://frontend:3001"
 
     api-service:
       loadBalancer:
