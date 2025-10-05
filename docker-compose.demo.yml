@@ -234,11 +234,10 @@ services:
 
 
   frontend:
-    image: timakaa/vinas-frontend:latest
+    image: timakaa/vinas-frontend:amd
     container_name: frontend
     restart: unless-stopped
 
-    platform: linux/amd64
     expose:
       - 3000
     networks:
