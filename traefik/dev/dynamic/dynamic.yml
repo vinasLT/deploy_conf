@@ -36,6 +36,13 @@ http:
       priority: 45
       middlewares: [calculator-strip, cors]
 
+    calculator-protected:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/calculator/private`)"
+      service: calculator
+      priority: 195
+      middlewares: [auth-forward, calculator-strip, cors]
+
     # Other services
     grafana:
       entryPoints: [web]

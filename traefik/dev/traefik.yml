@@ -3,7 +3,6 @@
 # Логирование
 log:
   level: DEBUG
-  filePath: /logs/traefik.log
 
 # Логи доступа
 accessLog:
