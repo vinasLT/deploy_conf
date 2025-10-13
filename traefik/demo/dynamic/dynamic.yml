@@ -46,6 +46,14 @@ http:
       tls: {}
       middlewares: [calculator-strip, cors]
 
+    calculator-protected:
+      entryPoints: [ web ]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/calculator/private`)"
+      service: calculator
+      priority: 195
+      middlewares: [ auth-forward, calculator-strip, cors ]
+
+
     grafana:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/grafana`)"
