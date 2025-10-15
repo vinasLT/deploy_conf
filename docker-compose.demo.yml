@@ -103,7 +103,7 @@ volumes:
 
 # Auth Service Template
 x-auth-base: &auth-base
-  image: ivanskrb21/vinaslt_auth_service:dev
+  image: ivanskrb21/vinaslt_auth_service:latest
   depends_on:
     postgres_auth:
       condition: service_healthy
