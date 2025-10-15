@@ -131,7 +131,7 @@ x-auth-environment: &auth-environment
 
 # API Service Template
 x-api-base: &api-base
-  image: ivanskrb21/vinaslt_api_service:latest
+  image: ivanskrb21/vinaslt_api_service:dev
   depends_on:
     redis_api_service:
       condition: service_healthy
