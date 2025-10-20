@@ -430,6 +430,8 @@ services:
     depends_on:
       postgres_payment:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       auth_service:
         condition: service_healthy
     healthcheck:
@@ -451,6 +453,8 @@ services:
       <<: *payment-environment
     depends_on:
       postgres_payment:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck
