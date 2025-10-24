@@ -103,7 +103,7 @@ volumes:
 
 # Auth Service Template
 x-auth-base: &auth-base
-  image: ivanskrb21/vinaslt_auth_service:latest
+  image: ivanskrb21/vinaslt_auth_service:dev
   platform: linux/arm64
   depends_on:
     postgres_auth:
