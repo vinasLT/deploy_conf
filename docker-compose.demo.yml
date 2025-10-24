@@ -235,7 +235,7 @@ services:
 
 
   frontend:
-    image: timakaa/vinas-frontend:amd
+    image: timakaa/vinas-frontend:prod
     container_name: frontend
     restart: unless-stopped
 

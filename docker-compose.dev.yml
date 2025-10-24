@@ -232,7 +232,7 @@ x-healthcheck: &healthcheck
 
 services:
   frontend:
-    image: timakaa/vinas-frontend:amd
+    image: timakaa/vinas-frontend:dev
     container_name: frontend
     platform: linux/amd64
     restart: unless-stopped
@@ -240,6 +240,8 @@ services:
       - "3000:3000"
     networks:
       - traefik_net
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
