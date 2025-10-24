@@ -70,6 +70,13 @@ http:
       priority: 80
       middlewares: [auth-strip, cors]
 
+    auth-protected:
+      entryPoints: [ web ]
+      rule: "Host(`localhost`) && PathPrefix(`/auth/v1/private`)"
+      service: auth
+      priority: 120
+      middlewares: [ auth-strip, cors, forward-auth]
+
   services:
 
     api-service:

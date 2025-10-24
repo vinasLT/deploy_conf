@@ -103,7 +103,7 @@ volumes:
 
 # Auth Service Template
 x-auth-base: &auth-base
-  image: ivanskrb21/vinaslt_auth_service:latest
+  image: ivanskrb21/vinaslt_auth_service:dev
   depends_on:
     postgres_auth:
       condition: service_healthy
@@ -131,7 +131,7 @@ x-auth-environment: &auth-environment
 
 # API Service Template
 x-api-base: &api-base
-  image: ivanskrb21/vinaslt_api_service:latest
+  image: ivanskrb21/vinaslt_api_service:dev
   depends_on:
     redis_api_service:
       condition: service_healthy
@@ -232,16 +232,14 @@ x-healthcheck: &healthcheck
 
 services:
   frontend:
-    image: timakaa/vinas-frontend:latest
+    image: timakaa/vinas-frontend:amd
     container_name: frontend
     platform: linux/amd64
     restart: unless-stopped
-    expose:
-      - 3000
+    ports:
+      - "3000:3000"
     networks:
       - traefik_net
-    environment:
-      - NEXT_PUBLIC_API_URL=https://api.vinas.lt/
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
