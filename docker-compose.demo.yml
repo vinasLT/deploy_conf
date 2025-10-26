@@ -243,8 +243,6 @@ services:
       - 3000
     networks:
       - traefik_net
-    environment:
-      - NEXT_PUBLIC_API_URL=https://api.vinas.lt/
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
