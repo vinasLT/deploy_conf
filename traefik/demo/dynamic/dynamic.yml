@@ -12,7 +12,7 @@ http:
       service: api-service
       priority: 100
       tls: {}
-      middlewares: [cors, api-strip]
+      middlewares: [api-strip, cors]
 
     payment-webhook:
       entryPoints: [websecure]
@@ -153,10 +153,20 @@ http:
 
     cors:
       headers:
-        accessControlAllowMethods: [GET, POST, PUT, DELETE, OPTIONS]
-        accessControlAllowOriginList: ["*"]
-        accessControlAllowHeaders: ["Content-Type", "Authorization", "X-Requested-With"]
-        accessControlExposeHeaders: ["X-Total-Count"]
+        accessControlAllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
+        accessControlAllowOriginList:
+          - "https://demo.vinas.lt"
+        accessControlAllowHeaders:
+          - "Content-Type"
+          - "Authorization"
+          - "X-Requested-With"
+        accessControlExposeHeaders:
+          - "X-Total-Count"
         accessControlAllowCredentials: true
         accessControlMaxAge: 86400
 
