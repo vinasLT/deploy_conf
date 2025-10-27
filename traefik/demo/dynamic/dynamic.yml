@@ -47,7 +47,7 @@ http:
       middlewares: [calculator-strip, cors]
 
     calculator-protected:
-      entryPoints: [ web ]
+      entryPoints: [ websecure ]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/calculator/private`)"
       service: calculator
       priority: 195
