@@ -174,6 +174,7 @@ x-payment-environment: &payment-environment
 # Carfax Service Template
 x-carfax-base: &carfax-base
   image: ivanskrb21/vinaslt_carfax_service:latest
+  restart: unless-stopped
   entrypoint: ["/app/entrypoint.sh"]
   depends_on:
     postgres_carfax:
@@ -231,17 +232,17 @@ x-healthcheck: &healthcheck
 # ========================================================================
 
 services:
+
+
   frontend:
-    image: timakaa/vinas-frontend:dev
+    image: timakaa/vinas-frontend:prod
     container_name: frontend
-    platform: linux/amd64
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+
+    expose:
+      - 3000
     networks:
       - traefik_net
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
@@ -257,14 +258,17 @@ services:
       - "--providers.docker=true"                    # Enable Docker provider
       - "--providers.docker.exposedbydefault=false"  # Require explicit labels
       - "--entrypoints.web.address=:80"              # HTTP entrypoint
+      - "--entrypoints.websecure.address=:443"             # HTTPS entrypoint
       - "--log.level=DEBUG"                          # Detailed logging
     ports:
       - "80:80"      # HTTP traffic
+      - "443:443"      # HTTPS traffic
       - "8080:8080"  # Traefik dashboard
     volumes:
-      - ./traefik/dev/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik/dev/dynamic:/etc/traefik/dynamic:ro
-      - ./traefik/dev/logs:/logs
+      - ./traefik/demo/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/demo/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/demo/logs:/logs
+      - traefik_letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket access
     networks:
       - traefik_net
@@ -425,6 +429,8 @@ services:
     depends_on:
       postgres_payment:
         condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
       auth_service:
         condition: service_healthy
     healthcheck:
@@ -446,6 +452,8 @@ services:
       <<: *payment-environment
     depends_on:
       postgres_payment:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck
@@ -828,8 +836,8 @@ services:
     # Available through Traefik at http://localhost/adminer/
     container_name: database_adminer
     restart: unless-stopped
-    ports:
-      - "8090:8080"
+    expose:
+      - 8080
 
     environment:
       - ADMINER_DEFAULT_SERVER=postgres_api
@@ -909,7 +917,7 @@ services:
       # Reverse proxy configuration
       - GF_SERVER_ROOT_URL=http://localhost/grafana/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
-      - GF_SERVER_HTTP_PORT=3000
+      - GF_SERVER_HTTP_PORT=3001
 
       # Logging configuration
       - GF_LOG_LEVEL=info

@@ -8,6 +8,12 @@ http:
       priority: 100
       middlewares: [cors, api-strip]
 
+    frontend:
+      entryPoints: [ websecure ]
+      rule: "Host(`localhost`)"
+      service: frontend
+      priority: 10
+
     payment-webhook:
       entryPoints: [web]
       rule: "Host(`localhost`) && Path(`/payment/public/stripe/webhook`)"
@@ -49,13 +55,6 @@ http:
       rule: "Host(`localhost`) && PathPrefix(`/grafana`)"
       service: grafana
       priority: 100
-
-    adminer:
-      entryPoints: [web]
-      rule: "Host(`localhost`) && PathPrefix(`/adminer`)"
-      service: adminer
-      priority: 95
-      middlewares: [adminer-strip, cors]
 
     notification:
       entryPoints: [web]
@@ -111,11 +110,6 @@ http:
         servers:
           - url: "http://grafana:3000"
 
-    adminer:
-      loadBalancer:
-        servers:
-          - url: "http://database_adminer:8080"
-
   middlewares:
     # Strip prefix middlewares
 
@@ -144,20 +138,12 @@ http:
       stripPrefix:
         prefixes: ["/rabbitmq"]
 
-    adminer-strip:
-      stripPrefix:
-        prefixes: ["/adminer"]
-
     cors:
       headers:
-        accessControlAllowMethods:
-          - GET
-          - POST
-          - PUT
-          - DELETE
-          - OPTIONS
+        accessControlAllowMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
         accessControlAllowOriginList:
-          - "*"
+          - "http://localhost:5173"     # Vite/React dev
+          - "http://localhost:3000"     # Next dev, если нужно
         accessControlAllowHeaders:
           - "Content-Type"
           - "Authorization"
@@ -168,16 +154,22 @@ http:
         accessControlMaxAge: 86400
 
     # Auth forward middleware
+
     auth-forward:
       forwardAuth:
         address: "http://auth_service:8003/v1/verify"
         trustForwardHeader: true
+
+        # 1) В auth-сервис пойдут ВСЕ заголовки, включая Cookie (можно вообще убрать блок ниже).
+        # Если хотите задать явно, оставьте 'Cookie' и то, что реально нужно:
         authRequestHeaders:
-          - Authorization
           - Cookie
+          - Authorization
           - X-Forwarded-Method
           - X-Forwarded-Host
           - X-Forwarded-Uri
+
+        # 2) Хедеры из ответа auth-сервиса, которые нужно добавить в запрос к бэкенду:
         authResponseHeaders:
           - X-User-ID
           - X-User-Email
