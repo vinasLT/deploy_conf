@@ -47,7 +47,7 @@ http:
       middlewares: [calculator-strip, cors]
 
     calculator-protected:
-      entryPoints: [ web ]
+      entryPoints: [ websecure ]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/calculator/private`)"
       service: calculator
       priority: 195
@@ -174,5 +174,20 @@ http:
       forwardAuth:
         address: "http://auth_service:8003/v1/verify"
         trustForwardHeader: true
-        authRequestHeaders: [Authorization, Cookie, X-Forwarded-Method, X-Forwarded-Host, X-Forwarded-Uri]
-        authResponseHeaders: [X-User-ID, X-User-Email, X-User-Role, X-Token-Expires, X-Permissions]
+
+        # 1) В auth-сервис пойдут ВСЕ заголовки, включая Cookie (можно вообще убрать блок ниже).
+        # Если хотите задать явно, оставьте 'Cookie' и то, что реально нужно:
+        authRequestHeaders:
+          - Cookie
+          - Authorization
+          - X-Forwarded-Method
+          - X-Forwarded-Host
+          - X-Forwarded-Uri
+
+        # 2) Хедеры из ответа auth-сервиса, которые нужно добавить в запрос к бэкенду:
+        authResponseHeaders:
+          - X-User-ID
+          - X-User-Email
+          - X-User-Role
+          - X-Token-Expires
+          - X-Permissions

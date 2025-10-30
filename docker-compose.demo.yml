@@ -103,7 +103,7 @@ volumes:
 
 # Auth Service Template
 x-auth-base: &auth-base
-  image: ivanskrb21/vinaslt_auth_service:dev
+  image: ivanskrb21/vinaslt_auth_service:main
   depends_on:
     postgres_auth:
       condition: service_healthy
@@ -131,7 +131,7 @@ x-auth-environment: &auth-environment
 
 # API Service Template
 x-api-base: &api-base
-  image: ivanskrb21/vinaslt_api_service:dev
+  image: ivanskrb21/vinaslt_api_service:main
   depends_on:
     redis_api_service:
       condition: service_healthy
