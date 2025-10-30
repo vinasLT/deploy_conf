@@ -165,7 +165,7 @@ http:
           - "Content-Type"
           - "Authorization"
           - "X-Requested-With"
-          - 'Access-Control-Allow-Origin'
+          - "Access-Control-Allow-Origin"
         accessControlExposeHeaders:
           - "X-Total-Count"
         accessControlAllowCredentials: true
