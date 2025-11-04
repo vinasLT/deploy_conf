@@ -47,7 +47,7 @@ http:
       rule: "Host(`localhost`) && PathPrefix(`/calculator/private`)"
       service: calculator
       priority: 195
-      middlewares: [auth-forward, calculator-strip, cors]
+      middlewares: [cors, auth-forward, calculator-strip]
 
     # Other services
     grafana:
@@ -69,6 +69,22 @@ http:
       service: auth
       priority: 80
       middlewares: [auth-strip, cors]
+
+    favorites:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/favorites`)"
+      service: favorites
+      priority: 70
+      middlewares: [ favorites-strip, cors ]
+
+    favorites-protected:
+      entryPoints: [ web ]
+      rule: "Host(`localhost`) && PathPrefix(`/favorites/private`)"
+      service: favorites
+      priority: 70
+      middlewares: [ cors, favorites-strip, auth-forward]
+
+
 
   services:
 
@@ -97,6 +113,11 @@ http:
         servers:
           - url: "http://notification_service:8004"
 
+    favorites:
+      loadBalancer:
+        servers:
+          - url: "http://favorites_service:8006"
+
     grafana:
       loadBalancer:
         servers:
@@ -116,6 +137,10 @@ http:
     auth-strip:
       stripPrefix:
         prefixes: [ "/auth" ]
+
+    favorites-strip:
+      stripPrefix:
+        prefixes: [ "/favorites" ]
 
 
     payment-strip:
