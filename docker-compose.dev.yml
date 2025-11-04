@@ -78,27 +78,26 @@ volumes:
   traefik_letsencrypt:
 
   # Database volumes (one per service for isolation)
-  pg_data_bot:          # Telegram bot data
-  pg_data_carfax:       # Carfax service data
-  pg_data_payment:      # Payment processing data
-  pg_data_auth:         # Authentication data
+  pg_data_bot: # Telegram bot data
+  pg_data_carfax: # Carfax service data
+  pg_data_payment: # Payment processing data
+  pg_data_auth: # Authentication data
   pg_data_notification: # Notification service data
-  pg_data_api:          # Main API service data
-  pg_data_calculator:   # Calculator service data
-  pg_data_favorites:    # Favorites service data
+  pg_data_api: # Main API service data
+  pg_data_calculator: # Calculator service data
+  pg_data_favorites: # Favorites service data
 
   # Caching volumes
-  redis_auth_data:      # Auth service cache
-  redis_api_data:       # API service cache
+  redis_auth_data: # Auth service cache
+  redis_api_data: # API service cache
   redis_calculator_data: # Calculator service cache
 
   # Message queue data
   rabbitmq_data:
 
   # Monitoring stack volumes
-  grafana-storage:      # Dashboards and configurations
-  loki-data:           # Log storage
-
+  grafana-storage: # Dashboards and configurations
+  loki-data: # Log storage
 
 # ========================================================================
 # REUSABLE SERVICE TEMPLATES
@@ -131,7 +130,6 @@ x-auth-environment: &auth-environment
   AWS_REGION:
   AWS_SECRET_ACCESS_KEY:
   DEBUG:
-
 
 # API Service Template
 x-api-base: &api-base
@@ -209,7 +207,6 @@ x-calculator-base: &calculator-base
     api_rpc_service:
       condition: service_healthy
 
-
 x-calculator-environment: &calculator-environment
   DB_HOST: postgres_calculator
   DB_PORT: 5432
@@ -242,7 +239,6 @@ x-favorites-environment: &favorites-environment
   ENVIRONMENT:
   DEBUG:
 
-
 # Standard Health Check Template
 x-healthcheck: &healthcheck
   interval: 30s
@@ -255,17 +251,17 @@ x-healthcheck: &healthcheck
 # ========================================================================
 
 services:
-  frontend:
-    image: timakaa/vinas-frontend:dev
-    container_name: frontend
-    platform: linux/amd64
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    networks:
-      - traefik_net
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost
+  # frontend:
+  #   image: timakaa/vinas-frontend:dev
+  #   container_name: frontend
+  #   platform: linux/amd64
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   networks:
+  #     - traefik_net
+  #   environment:
+  #     - NEXT_PUBLIC_API_URL=http://localhost
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
@@ -278,18 +274,18 @@ services:
     container_name: traefik
     restart: unless-stopped
     command:
-      - "--providers.docker=true"                    # Enable Docker provider
-      - "--providers.docker.exposedbydefault=false"  # Require explicit labels
-      - "--entrypoints.web.address=:80"              # HTTP entrypoint
-      - "--log.level=DEBUG"                          # Detailed logging
+      - "--providers.docker=true" # Enable Docker provider
+      - "--providers.docker.exposedbydefault=false" # Require explicit labels
+      - "--entrypoints.web.address=:80" # HTTP entrypoint
+      - "--log.level=DEBUG" # Detailed logging
     ports:
-      - "80:80"      # HTTP traffic
-      - "8080:8080"  # Traefik dashboard
+      - "80:80" # HTTP traffic
+      - "8080:8080" # Traefik dashboard
     volumes:
       - ./traefik/dev/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dev/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/dev/logs:/logs
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket access
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Docker socket access
     networks:
       - traefik_net
 
@@ -305,29 +301,39 @@ services:
   auth_service:
     <<: *auth-base
     container_name: auth_service
-    command: [ "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003", "--log-level", "debug", "--proxy-headers" ]
-    expose: [ "8003" ]
+    command:
+      [
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8003",
+        "--log-level",
+        "debug",
+        "--proxy-headers",
+      ]
+    expose: ["8003"]
     environment:
       <<: *auth-environment
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD-SHELL", "curl -f http://localhost:8003/health || exit 1" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:8003/health || exit 1"]
     networks:
-      - traefik_net        # Public access via Traefik
-      - auth_service_net   # Database access
-      - internal_net       # Inter-service communication
+      - traefik_net # Public access via Traefik
+      - auth_service_net # Database access
+      - internal_net # Inter-service communication
 
   auth_init_db:
     <<: *auth-base
     container_name: auth_init_db
-    command: [ "python", "scripts/init_db.py" ]
+    command: ["python", "scripts/init_db.py"]
     environment:
       <<: *auth-environment
     restart: "no"
     networks:
       - auth_service_net
       - internal_net
-
 
   # ----------------------------------------------------------------------
   # 2.2 NOTIFICATION SERVICE
@@ -337,7 +343,18 @@ services:
   notification_service:
     image: ivanskrb21/vinaslt_notification_service:latest
     container_name: notification_service
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8004", "--log-level", "debug", "--proxy-headers"]
+    command:
+      [
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8004",
+        "--log-level",
+        "debug",
+        "--proxy-headers",
+      ]
     expose: ["8004"]
     environment:
       - DB_HOST=postgres_notification
@@ -384,7 +401,18 @@ services:
   api_service:
     <<: *api-base
     container_name: api_service
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug", "--proxy-headers"]
+    command:
+      [
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--log-level",
+        "debug",
+        "--proxy-headers",
+      ]
     expose: ["8000"]
     environment:
       <<: *api-environment
@@ -392,10 +420,10 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
     networks:
-      - api_net            # External API access
+      - api_net # External API access
       - api_service_net
       - traefik_net
-      - internal_net       # Inter-service communication
+      - internal_net # Inter-service communication
 
   # API gRPC Service (Isolated for internal communication)
   api_rpc_service:
@@ -409,28 +437,27 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "grpc_health_probe -addr=api_rpc_service:50051"]
     networks:
-      - api_rpc_net        # Isolated gRPC network
-      - api_service_net    # Database and Redis access
-      - internal_net       # Internal services access
+      - api_rpc_net # Isolated gRPC network
+      - api_service_net # Database and Redis access
+      - internal_net # Internal services access
 
   api_init_db:
     <<: *api-base
     container_name: api_init_db
-    command: [ "python", "scripts/init_db.py" ]
+    command: ["python", "scripts/init_db.py"]
     environment:
       <<: *api-environment
     depends_on:
-        api_service:
-          condition: service_healthy
-        api_rpc_service:
-          condition: service_healthy
+      api_service:
+        condition: service_healthy
+      api_rpc_service:
+        condition: service_healthy
     restart: "no"
 
     networks:
-      - api_rpc_net        # Isolated gRPC network
-      - api_service_net    # Database and Redis access
+      - api_rpc_net # Isolated gRPC network
+      - api_service_net # Database and Redis access
       - internal_net
-
 
   # ----------------------------------------------------------------------
   # 2.4 PAYMENT PROCESSING SERVICE (HTTP + gRPC)
@@ -441,7 +468,18 @@ services:
     <<: *payment-base
     container_name: payment_service
     entrypoint: ["/app/entrypoint.sh"]
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "debug", "--proxy-headers"]
+    command:
+      [
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8002",
+        "--log-level",
+        "debug",
+        "--proxy-headers",
+      ]
     expose: ["8002"]
     environment:
       <<: *payment-environment
@@ -455,9 +493,9 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
     networks:
-      - traefik_net        # Public access for webhooks
+      - traefik_net # Public access for webhooks
       - payment_service_net # Database access
-      - internal_net       # Inter-service communication
+      - internal_net # Inter-service communication
 
   # Payment gRPC Service (Isolated for internal communication)
   payment_rpc_service:
@@ -475,9 +513,9 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "grpc_health_probe -addr=payment_rpc_service:50052"]
     networks:
-      - payment_rpc_net     # Isolated gRPC network
+      - payment_rpc_net # Isolated gRPC network
       - payment_service_net # Database access
-      - internal_net        # Internal services access
+      - internal_net # Internal services access
 
   # ----------------------------------------------------------------------
   # 2.5 CARFAX INTEGRATION SERVICE (HTTP + gRPC)
@@ -487,7 +525,17 @@ services:
   carfax_service:
     <<: *carfax-base
     container_name: carfax_service
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--log-level", "debug"]
+    command:
+      [
+        "uvicorn",
+        "main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8001",
+        "--log-level",
+        "debug",
+      ]
     expose: ["8001"]
     environment:
       <<: *carfax-environment
@@ -517,10 +565,10 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "grpc_health_probe -addr=carfax_rpc_service:50053"]
     networks:
-      - carfax_rpc_net      # Isolated gRPC network
-      - payment_rpc_net     # Can communicate with payment RPC
-      - carfax_service_net  # Database access
-      - internal_net        # Internal services access
+      - carfax_rpc_net # Isolated gRPC network
+      - payment_rpc_net # Can communicate with payment RPC
+      - carfax_service_net # Database access
+      - internal_net # Internal services access
 
   # ----------------------------------------------------------------------
   # 2.6 TELEGRAM BOT SERVICE
@@ -557,10 +605,10 @@ services:
       - postgres_bot
     restart: unless-stopped
     networks:
-      - api_rpc_net         # gRPC communication with API
-      - carfax_rpc_net      # gRPC communication with Carfax
-      - telegram_bot_net    # Bot database access
-      - internal_net        # HTTP service communication
+      - api_rpc_net # gRPC communication with API
+      - carfax_rpc_net # gRPC communication with Carfax
+      - telegram_bot_net # Bot database access
+      - internal_net # HTTP service communication
 
   # ----------------------------------------------------------------------
   # 2.7 CALCULATOR SERVICE (HTTP + INITIAL DATA LOAD)
@@ -569,26 +617,36 @@ services:
 
   # HTTP Calculator Service
   calculator_service:
-      <<: *calculator-base
-      container_name: calculator_service
-      command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005", "--log-level", "debug" ]
-      expose: [ "8005" ]
-      environment:
-        <<: *calculator-environment
-      healthcheck:
-        <<: *healthcheck
-        test: ["CMD-SHELL", "curl -f http://localhost:8005/health || exit 1"]
-      networks:
-        - calculator_service_net
-        - internal_net
-        - traefik_net
-        - api_rpc_net
+    <<: *calculator-base
+    container_name: calculator_service
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8005",
+        "--log-level",
+        "debug",
+      ]
+    expose: ["8005"]
+    environment:
+      <<: *calculator-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8005/health || exit 1"]
+    networks:
+      - calculator_service_net
+      - internal_net
+      - traefik_net
+      - api_rpc_net
 
     # Initial Data Load Service (runs once to populate DB)
   calculator_init_db:
     <<: *calculator-base
     container_name: calculator_init_db
-    command: [ "python", "scripts/init_db.py"]
+    command: ["python", "scripts/init_db.py"]
     environment:
       <<: *calculator-environment
     depends_on:
@@ -606,7 +664,7 @@ services:
   favorites_service:
     <<: *favorites-base
     container_name: favorites_service
-    command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8006" ]
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8006"]
     depends_on:
       api_rpc_service:
         condition: service_healthy
@@ -618,7 +676,7 @@ services:
 
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD-SHELL", "curl -f http://localhost:8006/health || exit 1" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:8006/health || exit 1"]
 
     networks:
       - favorites_service_net
@@ -641,7 +699,7 @@ services:
     container_name: rabbitmq
     restart: unless-stopped
     ports:
-      - "5672:5672"   # AMQP protocol
+      - "5672:5672" # AMQP protocol
       - "15672:15672" # Management UI
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
@@ -781,7 +839,11 @@ services:
       - POSTGRES_DB=${NOTIFICATION_DB_NAME}
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${NOTIFICATION_DB_USER} -d ${NOTIFICATION_DB_NAME}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${NOTIFICATION_DB_USER} -d ${NOTIFICATION_DB_NAME}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -816,7 +878,8 @@ services:
       - POSTGRES_DB=${CARFAX_DB_NAME}
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${CARFAX_DB_USER} -d ${CARFAX_DB_NAME}" ]
+      test:
+        ["CMD-SHELL", "pg_isready -U ${CARFAX_DB_USER} -d ${CARFAX_DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -836,7 +899,8 @@ services:
       - POSTGRES_PASSWORD=${PAYMENT_DB_PASS}
       - POSTGRES_DB=${PAYMENT_DB_NAME}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER} -d ${PAYMENT_DB_NAME}"]
+      test:
+        ["CMD-SHELL", "pg_isready -U ${PAYMENT_DB_USER} -d ${PAYMENT_DB_NAME}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -859,7 +923,11 @@ services:
       - POSTGRES_DB=${CALCULATOR_DB_NAME}
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${CALCULATOR_DB_USER} -d ${CALCULATOR_DB_NAME}" ]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${CALCULATOR_DB_USER} -d ${CALCULATOR_DB_NAME}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -879,7 +947,11 @@ services:
       - POSTGRES_DB=${FAVORITES_DB_NAME}
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${FAVORITES_DB_USER} -d ${FAVORITES_DB_NAME}" ]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${FAVORITES_DB_USER} -d ${FAVORITES_DB_NAME}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -887,7 +959,6 @@ services:
     networks:
       - favorites_service_net
       - adminer_database_net
-
 
   # ======================================================================
   # 5.2 ADMINER DATABASE MANAGEMENT
@@ -907,7 +978,7 @@ services:
 
     networks:
       - adminer_database_net
-      - traefik_net            # Доступ через reverse proxy
+      - traefik_net # Доступ через reverse proxy
 
     depends_on:
       - postgres_api
@@ -920,12 +991,15 @@ services:
       - postgres_favorites
 
     healthcheck:
-      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1" ]
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1",
+        ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
 
   # ======================================================================
   # 6. MONITORING & OBSERVABILITY STACK
@@ -952,8 +1026,8 @@ services:
     image: grafana/promtail:latest
     container_name: promtail
     volumes:
-      - /var/log:/var/log:ro                                    # System logs
-      - /var/run/docker.sock:/var/run/docker.sock:ro           # Docker API access
+      - /var/log:/var/log:ro # System logs
+      - /var/run/docker.sock:/var/run/docker.sock:ro # Docker API access
       - /var/lib/docker/containers:/var/lib/docker/containers:ro # Container logs
       - ./promtail-config.yaml:/etc/promtail/config.yml
     command: -config.file=/etc/promtail/config.yml
@@ -962,7 +1036,7 @@ services:
     depends_on:
       - loki
     restart: unless-stopped
-    user: root  # Required for accessing Docker logs
+    user: root # Required for accessing Docker logs
 
   # ----------------------------------------------------------------------
   # 6.2 MONITORING DASHBOARD
@@ -987,12 +1061,11 @@ services:
     volumes:
       - grafana-storage:/var/lib/grafana
     networks:
-      - monitoring    # Access to Loki for data source
-      - traefik_net   # Public access via reverse proxy
+      - monitoring # Access to Loki for data source
+      - traefik_net # Public access via reverse proxy
     depends_on:
       - loki
     restart: unless-stopped
-
 # ========================================================================
 # ARCHITECTURE SUMMARY
 # ========================================================================
