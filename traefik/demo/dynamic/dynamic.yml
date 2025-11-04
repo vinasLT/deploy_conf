@@ -51,7 +51,7 @@ http:
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/calculator/private`)"
       service: calculator
       priority: 195
-      middlewares: [ auth-forward, calculator-strip, cors ]
+      middlewares: [ cors, calculator-strip, auth-forward ]
 
 
     grafana:
