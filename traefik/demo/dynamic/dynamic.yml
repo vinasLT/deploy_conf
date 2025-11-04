@@ -85,6 +85,22 @@ http:
       tls: {}
       middlewares: [auth-strip, cors]
 
+    favorites:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/favorites`)"
+      service: favorites
+      priority: 70
+      tls: {}
+      middlewares: [cors, favorites-strip]
+
+    favorites-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/favorites/private`)"
+      service: favorites
+      priority: 70
+      tls: {}
+      middlewares: [cors, favorites-strip, auth-forward]
+
   services:
     frontend:
       loadBalancer:
@@ -115,6 +131,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://notification_service:8004"
+
+    favorites:
+      loadBalancer:
+        servers:
+          - url: "http://favorites_service:8006"
 
     grafana:
       loadBalancer:
@@ -150,6 +171,10 @@ http:
     rabbitmq-strip:
       stripPrefix:
         prefixes: ["/rabbitmq"]
+
+    favorites-strip:
+      stripPrefix:
+        prefixes: ["/favorites"]
 
     cors:
       headers:
