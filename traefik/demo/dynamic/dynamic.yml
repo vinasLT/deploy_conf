@@ -91,13 +91,13 @@ http:
       service: favorites
       priority: 70
       tls: {}
-      middlewares: [cors, favorites-strip]
+      middlewares: [favorites-strip, cors]
 
     favorites-protected:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/favorites/private`)"
       service: favorites
-      priority: 70
+      priority: 195
       tls: {}
       middlewares: [cors, favorites-strip, auth-forward]
 
