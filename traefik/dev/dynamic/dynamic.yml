@@ -84,6 +84,19 @@ http:
       priority: 70
       middlewares: [ cors, favorites-strip, auth-forward]
 
+    bid:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/bid`)"
+      service: bid
+      priority: 55
+      middlewares: [ cors, bid-strip ]
+
+    bid-protected:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/bid/private`)"
+      service: bid
+      priority: 60
+      middlewares: [ cors, auth-forward, bid-strip ]
 
 
   services:
@@ -118,6 +131,11 @@ http:
         servers:
           - url: "http://favorites_service:8006"
 
+    bid:
+      loadBalancer:
+        servers:
+          - url: "http://bid_service:8007"
+
     grafana:
       loadBalancer:
         servers:
@@ -142,6 +160,9 @@ http:
       stripPrefix:
         prefixes: [ "/favorites" ]
 
+    bid-strip:
+      stripPrefix:
+        prefixes: [ "/bid" ]
 
     payment-strip:
       stripPrefix:

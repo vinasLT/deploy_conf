@@ -49,6 +49,8 @@ networks:
     driver: bridge
   favorites_service_net:
     driver: bridge
+  bid_service_net:
+    driver: bridge
 
   # Isolated RPC networks for secure gRPC communication
   carfax_rpc_net:
@@ -56,6 +58,8 @@ networks:
   payment_rpc_net:
     driver: bridge
   api_rpc_net:
+    driver: bridge
+  auth_rpc_net:
     driver: bridge
 
   # Infrastructure networks
@@ -86,6 +90,7 @@ volumes:
   pg_data_api: # Main API service data
   pg_data_calculator: # Calculator service data
   pg_data_favorites: # Favorites service data
+  pg_data_bid: # Bid service data
 
   # Caching volumes
   redis_auth_data: # Auth service cache
@@ -122,6 +127,7 @@ x-auth-environment: &auth-environment
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
   REDIS_URL: redis://redis_auth:6379
   ROOT_PATH: /auth
+  GRPC_SERVER_PORT: 50054
   ENVIRONMENT:
   RABBITMQ_EXCHANGE_NAME:
   # AWS KMS integration for encryption
@@ -155,7 +161,7 @@ x-api-environment: &api-environment
 
 # Payment Service Template
 x-payment-base: &payment-base
-  image: ivanskrb21/vinaslt_payment_service:latest
+  image: ivanskrb21/vinaslt_payment_service:dev
   depends_on:
     postgres_payment:
       condition: service_healthy
@@ -167,7 +173,7 @@ x-payment-environment: &payment-environment
   DB_PASS: ${PAYMENT_DB_PASS}
   DB_USER: ${PAYMENT_DB_USER}
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-  GRPC_SERVER_PORT: 50052
+  GRPC_SERVER_PORT: 50053
   STRIPE_SECRET_KEY:
   STRIPE_WEBHOOK_SECRET:
   ENVIRONMENT:
@@ -192,7 +198,7 @@ x-carfax-environment: &carfax-environment
   ROOT_PATH: /carfax
   GRPC_SERVER_PORT: 50053
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-  PAYMENT_SERVICE_RPC_URL: payment_rpc_service:50052
+  PAYMENT_SERVICE_RPC_URL: payment_rpc_service:50053
   COMPANY_LINK:
   CARFAX_API_TOKEN:
   ENVIRONMENT:
@@ -236,6 +242,35 @@ x-favorites-environment: &favorites-environment
 
   ROOT_PATH: /favorites
   RPC_API_URL: api_rpc_service:50051
+  ENVIRONMENT:
+  DEBUG:
+
+# Bid Service Template
+x-bid-base: &bid-base
+  image: ivanskrb21/vinaslt_bid_service:dev
+  depends_on:
+    postgres_bid:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    api_rpc_service:
+      condition: service_healthy
+    payment_rpc_service:
+      condition: service_healthy
+    auth_rpc_service:
+      condition: service_healthy
+
+x-bid-environment: &bid-environment
+  DB_HOST: postgres_bid
+  DB_PORT: 5432
+  DB_USER: ${BID_DB_USER}
+  DB_PASS: ${BID_DB_PASS}
+  DB_NAME: ${BID_DB_NAME}
+  ROOT_PATH: /bid
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+  RPC_API_URL: api_rpc_service:50051
+  RPC_PAYMENT_URL: payment_rpc_service:50053
+  RPC_AUTH_URL: auth_rpc_service:50054
   ENVIRONMENT:
   DEBUG:
 
@@ -324,6 +359,22 @@ services:
       - auth_service_net # Database access
       - internal_net # Inter-service communication
 
+  # Auth gRPC Service (Isolated for internal communication)
+  auth_rpc_service:
+    <<: *auth-base
+    container_name: auth_rpc_service
+    command: ["python", "serve_rpc.py"]
+    expose: ["50054"]
+    environment:
+      <<: *auth-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=localhost:50054"]
+    networks:
+      - auth_rpc_net # Isolated gRPC network
+      - auth_service_net # Database access
+      - internal_net # Internal services access
+
   auth_init_db:
     <<: *auth-base
     container_name: auth_init_db
@@ -341,7 +392,7 @@ services:
   # Handles email and SMS notifications via Twilio and SMTP
 
   notification_service:
-    image: ivanskrb21/vinaslt_notification_service:latest
+    image: ivanskrb21/vinaslt_notification_service:dev
     container_name: notification_service
     command:
       [
@@ -503,7 +554,7 @@ services:
     container_name: payment_rpc_service
     entrypoint: ["/app/entrypoint.sh"]
     command: ["python", "serve_rpc.py"]
-    expose: ["50052"]
+    expose: ["50053"]
     environment:
       <<: *payment-environment
     depends_on:
@@ -511,7 +562,7 @@ services:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck
-      test: ["CMD-SHELL", "grpc_health_probe -addr=payment_rpc_service:50052"]
+      test: ["CMD-SHELL", "grpc_health_probe -addr=payment_rpc_service:50053"]
     networks:
       - payment_rpc_net # Isolated gRPC network
       - payment_service_net # Database access
@@ -682,6 +733,41 @@ services:
       - favorites_service_net
       - api_rpc_net
       - internal_net
+      - traefik_net
+
+  # ----------------------------------------------------------------------
+  # 2.8 BID SERVICE
+  # ----------------------------------------------------------------------
+  # Handles auction bidding operations and gRPC integrations
+
+  bid_service:
+    <<: *bid-base
+    container_name: bid_service
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8007",
+        "--log-level",
+        "debug",
+        "--proxy-headers",
+      ]
+    expose: ["8007"]
+    environment:
+      <<: *bid-environment
+    restart: unless-stopped
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8007/health || exit 1"]
+    networks:
+      - bid_service_net # Database access
+      - internal_net # RabbitMQ communication
+      - api_rpc_net # gRPC access to API service
+      - payment_rpc_net # gRPC access to payment service
+      - auth_rpc_net # gRPC access to auth service
       - traefik_net
 
   # ======================================================================
@@ -960,6 +1046,27 @@ services:
       - favorites_service_net
       - adminer_database_net
 
+  postgres_bid:
+    image: postgres:17.5
+    container_name: postgres_bid
+    volumes:
+      - pg_data_bid:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${BID_DB_USER}
+      - POSTGRES_PASSWORD=${BID_DB_PASS}
+      - POSTGRES_DB=${BID_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${BID_DB_USER} -d ${BID_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - bid_service_net
+      - adminer_database_net
+
   # ======================================================================
   # 5.2 ADMINER DATABASE MANAGEMENT
   # ======================================================================
@@ -989,6 +1096,7 @@ services:
       - postgres_payment
       - postgres_calculator
       - postgres_favorites
+      - postgres_bid
 
     healthcheck:
       test:
@@ -1071,18 +1179,22 @@ services:
 # ========================================================================
 #
 # SERVICE PORTS:
-# - Traefik:           80 (HTTP), 8080 (Dashboard)
-# - API Service:       8000 (HTTP), 50051 (gRPC)
-# - Payment Service:   8002 (HTTP), 50052 (gRPC)
-# - Auth Service:      8003 (HTTP)
-# - Notification:      8004 (HTTP)
-# - Carfax Service:    8001 (HTTP), 50053 (gRPC)
-# - RabbitMQ:          5672 (AMQP), 15672 (Management)
-# - Grafana:           3000 (accessible via /grafana/)
+# - Traefik:             80 (HTTP), 8080 (Dashboard)
+# - API Service / RPC:   8000 (HTTP), 50051 (gRPC)
+# - Payment Service / RPC: 8002 (HTTP), 50053 (gRPC)
+# - Auth Service / RPC:  8003 (HTTP), 50054 (gRPC)
+# - Carfax Service / RPC: 8001 (HTTP), 50053 (gRPC)
+# - Notification:        8004 (HTTP)
+# - Calculator:          8005 (HTTP)
+# - Favorites:           8006 (HTTP)
+# - Bid Service:         8007 (HTTP)
+# - RabbitMQ:            5672 (AMQP), 15672 (Management)
+# - Adminer:             8090 -> 8080 (DB UI)
+# - Grafana:             3000 (accessible via /grafana/)
 #
 # COMMUNICATION PATTERNS:
 # - HTTP: Public APIs and inter-service REST calls
-# - gRPC: High-performance internal service communication
+# - gRPC: High-performance internal service communication across api_rpc_net, payment_rpc_net, auth_rpc_net, and carfax_rpc_net
 # - RabbitMQ: Asynchronous event-driven communication
 # - Redis: Caching and session storage
 #
