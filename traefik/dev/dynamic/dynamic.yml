@@ -16,23 +16,23 @@ http:
 
     payment-webhook:
       entryPoints: [web]
-      rule: "Host(`localhost`) && Path(`/payment/public`)"
+      rule: "Host(`localhost`) && Path(`/payment/public/stripe/webhook`)"
       service: payment
       priority: 200  # Высокий приоритет для webhook
       middlewares: [payment-strip, cors]
 
-    payment-public:
+    payment:
       entryPoints: [web]
-      rule: "Host(`localhost`) && (Path(`/payment/docs`) || PathPrefix(`/payment/docs/`) || Path(`/payment/openapi.json`))"
+      rule: "Host(`localhost`) && PathPrefix(`/payment`)"
       service: payment
-      priority: 190
+      priority: 45
       middlewares: [payment-strip, cors]
 
     payment-protected:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/payment/private`)"
       service: payment
-      priority: 50
+      priority: 195
       middlewares: [auth-forward, payment-strip, cors]
 
     calculator:
