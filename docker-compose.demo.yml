@@ -234,15 +234,15 @@ x-healthcheck: &healthcheck
 services:
 
 
-#  frontend:
-#    image: timakaa/vinas-frontend:prod
-#    container_name: frontend
-#    restart: unless-stopped
-#
-#    expose:
-#      - 3000
-#    networks:
-#      - traefik_net
+  frontend:
+    image: timakaa/vinas-frontend:prod
+    container_name: frontend
+    restart: unless-stopped
+
+    expose:
+      - 3000
+    networks:
+      - traefik_net
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
