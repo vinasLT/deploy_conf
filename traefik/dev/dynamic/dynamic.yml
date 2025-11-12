@@ -81,7 +81,7 @@ http:
       entryPoints: [ web ]
       rule: "Host(`localhost`) && PathPrefix(`/favorites/private`)"
       service: favorites
-      priority: 70
+      priority: 90
       middlewares: [ cors, favorites-strip, auth-forward]
 
     bid:
