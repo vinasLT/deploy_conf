@@ -128,6 +128,7 @@ x-auth-environment: &auth-environment
   REDIS_URL: redis://redis_auth:6379
   ROOT_PATH: /auth
   GRPC_SERVER_PORT: 50054
+  RPC_PAYMENT_URL: payment_rpc_service:50053
   ENVIRONMENT:
   RABBITMQ_EXCHANGE_NAME:
   # AWS KMS integration for encryption

@@ -16,7 +16,7 @@ http:
 
     payment-webhook:
       entryPoints: [web]
-      rule: "Host(`localhost`) && Path(`/payment/public/stripe/webhook`)"
+      rule: "Host(`localhost`) && Path(`/payment/public`)"
       service: payment
       priority: 200  # Высокий приоритет для webhook
       middlewares: [payment-strip, cors]
@@ -181,7 +181,7 @@ http:
         accessControlAllowMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
         accessControlAllowOriginList:
           - "http://localhost:5173"     # Vite/React dev
-          - "http://localhost:3000"     # Next dev, если нужно
+          - "http://localhost:3000"     # Next dev, ес"ли нужно
         accessControlAllowHeaders:
           - "Content-Type"
           - "Authorization"
