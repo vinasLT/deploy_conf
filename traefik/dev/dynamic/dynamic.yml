@@ -14,13 +14,6 @@ http:
       service: frontend
       priority: 10
 
-    payment-webhook:
-      entryPoints: [web]
-      rule: "Host(`localhost`) && Path(`/payment/public/stripe/webhook`)"
-      service: payment
-      priority: 200  # Высокий приоритет для webhook
-      middlewares: [payment-strip, cors]
-
     payment:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/payment`)"
@@ -33,7 +26,7 @@ http:
       rule: "Host(`localhost`) && PathPrefix(`/payment/private`)"
       service: payment
       priority: 195
-      middlewares: [auth-forward, payment-strip, cors]
+      middlewares: [cors, auth-forward, payment-strip]
 
     calculator:
       entryPoints: [web]
