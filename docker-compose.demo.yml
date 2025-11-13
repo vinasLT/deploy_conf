@@ -163,7 +163,7 @@ x-api-environment: &api-environment
 
 # Payment Service Template
 x-payment-base: &payment-base
-  image: ivanskrb21/vinaslt_payment_service:latest
+  image: ivanskrb21/vinaslt_payment_service:main
   depends_on:
     postgres_payment:
       condition: service_healthy

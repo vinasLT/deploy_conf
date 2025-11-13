@@ -183,6 +183,7 @@ x-payment-environment: &payment-environment
 # Carfax Service Template
 x-carfax-base: &carfax-base
   image: ivanskrb21/vinaslt_carfax_service:latest
+  restart: unless-stopped
   entrypoint: ["/app/entrypoint.sh"]
   depends_on:
     postgres_carfax:
