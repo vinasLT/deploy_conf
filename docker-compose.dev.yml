@@ -128,7 +128,7 @@ x-auth-environment: &auth-environment
   REDIS_URL: redis://redis_auth:6379
   ROOT_PATH: /auth
   GRPC_SERVER_PORT: 50054
-  RPC_PAYMENT_URL: payment_rpc_service:50053
+  RPC_PAYMENT_URL: payment_rpc_service:50052
   ENVIRONMENT:
   RABBITMQ_EXCHANGE_NAME:
   # AWS KMS integration for encryption
@@ -174,7 +174,7 @@ x-payment-environment: &payment-environment
   DB_PASS: ${PAYMENT_DB_PASS}
   DB_USER: ${PAYMENT_DB_USER}
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-  GRPC_SERVER_PORT: 50053
+  GRPC_SERVER_PORT: 50052
   STRIPE_SECRET_KEY:
   STRIPE_WEBHOOK_SECRET:
   ENVIRONMENT:
@@ -199,7 +199,7 @@ x-carfax-environment: &carfax-environment
   ROOT_PATH: /carfax
   GRPC_SERVER_PORT: 50053
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-  PAYMENT_SERVICE_RPC_URL: payment_rpc_service:50053
+  PAYMENT_SERVICE_RPC_URL: payment_rpc_service:50052
   COMPANY_LINK:
   CARFAX_API_TOKEN:
   ENVIRONMENT:
@@ -270,7 +270,7 @@ x-bid-environment: &bid-environment
   ROOT_PATH: /bid
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
   RPC_API_URL: api_rpc_service:50051
-  RPC_PAYMENT_URL: payment_rpc_service:50053
+  RPC_PAYMENT_URL: payment_rpc_service:50052
   RPC_AUTH_URL: auth_rpc_service:50054
   ENVIRONMENT:
   DEBUG:
@@ -555,7 +555,7 @@ services:
     container_name: payment_rpc_service
     entrypoint: ["/app/entrypoint.sh"]
     command: ["python", "serve_rpc.py"]
-    expose: ["50053"]
+    expose: ["50052"]
     environment:
       <<: *payment-environment
     depends_on:
@@ -563,7 +563,7 @@ services:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck
-      test: ["CMD-SHELL", "grpc_health_probe -addr=payment_rpc_service:50053"]
+      test: ["CMD-SHELL", "grpc_health_probe -addr=payment_rpc_service:50052"]
     networks:
       - payment_rpc_net # Isolated gRPC network
       - payment_service_net # Database access
@@ -1182,7 +1182,7 @@ services:
 # SERVICE PORTS:
 # - Traefik:             80 (HTTP), 8080 (Dashboard)
 # - API Service / RPC:   8000 (HTTP), 50051 (gRPC)
-# - Payment Service / RPC: 8002 (HTTP), 50053 (gRPC)
+# - Payment Service / RPC: 8002 (HTTP), 50052 (gRPC)
 # - Auth Service / RPC:  8003 (HTTP), 50054 (gRPC)
 # - Carfax Service / RPC: 8001 (HTTP), 50053 (gRPC)
 # - Notification:        8004 (HTTP)

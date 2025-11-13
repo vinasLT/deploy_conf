@@ -101,6 +101,22 @@ http:
       tls: {}
       middlewares: [cors, favorites-strip, auth-forward]
 
+    bid:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/bid`)"
+      service: bid
+      priority: 55
+      tls: {}
+      middlewares: [cors, bid-strip]
+
+    bid-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/bid/private`)"
+      service: bid
+      priority: 60
+      tls: {}
+      middlewares: [cors, auth-forward, bid-strip]
+
   services:
     frontend:
       loadBalancer:
@@ -136,6 +152,11 @@ http:
       loadBalancer:
         servers:
           - url: "http://favorites_service:8006"
+
+    bid:
+      loadBalancer:
+        servers:
+          - url: "http://bid_service:8007"
 
     grafana:
       loadBalancer:
@@ -175,6 +196,10 @@ http:
     favorites-strip:
       stripPrefix:
         prefixes: ["/favorites"]
+
+    bid-strip:
+      stripPrefix:
+        prefixes: ["/bid"]
 
     cors:
       headers:
