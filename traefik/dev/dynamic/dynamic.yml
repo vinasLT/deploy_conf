@@ -14,26 +14,19 @@ http:
       service: frontend
       priority: 10
 
-    payment-webhook:
+    payment:
       entryPoints: [web]
-      rule: "Host(`localhost`) && Path(`/payment/public/stripe/webhook`)"
+      rule: "Host(`localhost`) && PathPrefix(`/payment`)"
       service: payment
-      priority: 200  # Высокий приоритет для webhook
-      middlewares: [payment-strip, cors]
-
-    payment-public:
-      entryPoints: [web]
-      rule: "Host(`localhost`) && (Path(`/payment/docs`) || PathPrefix(`/payment/docs/`) || Path(`/payment/openapi.json`))"
-      service: payment
-      priority: 190
+      priority: 45
       middlewares: [payment-strip, cors]
 
     payment-protected:
       entryPoints: [web]
       rule: "Host(`localhost`) && PathPrefix(`/payment/private`)"
       service: payment
-      priority: 50
-      middlewares: [auth-forward, payment-strip, cors]
+      priority: 195
+      middlewares: [cors, auth-forward, payment-strip]
 
     calculator:
       entryPoints: [web]
@@ -81,9 +74,22 @@ http:
       entryPoints: [ web ]
       rule: "Host(`localhost`) && PathPrefix(`/favorites/private`)"
       service: favorites
-      priority: 70
-      middlewares: [ cors, favorites-strip, auth-forward]
+      priority: 90
+      middlewares: [ cors,auth-forward, favorites-strip ]
 
+    bid:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/bid`)"
+      service: bid
+      priority: 55
+      middlewares: [ cors, bid-strip ]
+
+    bid-protected:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/bid/private`)"
+      service: bid
+      priority: 60
+      middlewares: [ cors, auth-forward, bid-strip ]
 
 
   services:
@@ -118,6 +124,11 @@ http:
         servers:
           - url: "http://favorites_service:8006"
 
+    bid:
+      loadBalancer:
+        servers:
+          - url: "http://bid_service:8007"
+
     grafana:
       loadBalancer:
         servers:
@@ -142,6 +153,9 @@ http:
       stripPrefix:
         prefixes: [ "/favorites" ]
 
+    bid-strip:
+      stripPrefix:
+        prefixes: [ "/bid" ]
 
     payment-strip:
       stripPrefix:
@@ -160,7 +174,7 @@ http:
         accessControlAllowMethods: [ GET, POST, PUT, DELETE, OPTIONS ]
         accessControlAllowOriginList:
           - "http://localhost:5173"     # Vite/React dev
-          - "http://localhost:3000"     # Next dev, если нужно
+          - "http://localhost:3000"     # Next dev, ес"ли нужно
         accessControlAllowHeaders:
           - "Content-Type"
           - "Authorization"

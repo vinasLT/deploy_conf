@@ -49,6 +49,8 @@ networks:
     driver: bridge
   favorites_service_net:
     driver: bridge
+  bid_service_net:
+    driver: bridge
 
   # Isolated RPC networks for secure gRPC communication
   carfax_rpc_net:
@@ -56,6 +58,8 @@ networks:
   payment_rpc_net:
     driver: bridge
   api_rpc_net:
+    driver: bridge
+  auth_rpc_net:
     driver: bridge
 
   # Infrastructure networks
@@ -86,6 +90,7 @@ volumes:
   pg_data_api:          # Main API service data
   pg_data_calculator:   # Calculator service data
   pg_data_favorites:    # Favorites service data
+  pg_data_bid:          # Bid service data
 
   # Caching volumes
   redis_auth_data:      # Auth service cache
@@ -106,7 +111,7 @@ volumes:
 
 # Auth Service Template
 x-auth-base: &auth-base
-  image: ivanskrb21/vinaslt_auth_service:main
+  image: ivanskrb21/vinaslt_auth_service:dev
   depends_on:
     postgres_auth:
       condition: service_healthy
@@ -134,7 +139,7 @@ x-auth-environment: &auth-environment
 
 # API Service Template
 x-api-base: &api-base
-  image: ivanskrb21/vinaslt_api_service:main
+  image: ivanskrb21/vinaslt_api_service:dev
   depends_on:
     redis_api_service:
       condition: service_healthy
@@ -223,7 +228,7 @@ x-calculator-environment: &calculator-environment
   DEBUG:
 
 x-favorites-base: &favorites-base
-  image: ivanskrb21/vinaslt_favorites_service:main
+  image: ivanskrb21/vinaslt_favorites_service:dev
   depends_on:
     postgres_favorites:
       condition: service_healthy
@@ -236,9 +241,36 @@ x-favorites-environment: &favorites-environment
   DB_USER: ${FAVORITES_DB_USER}
   DB_PASS: ${FAVORITES_DB_PASS}
   DB_NAME: ${FAVORITES_DB_NAME}
-
   ROOT_PATH: /favorites
   RPC_API_URL: api_rpc_service:50051
+  ENVIRONMENT:
+  DEBUG:
+
+x-bid-base: &bid-base
+  image: ivanskrb21/vinaslt_bid_service:dev
+  depends_on:
+    postgres_bid:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    api_rpc_service:
+      condition: service_healthy
+    payment_rpc_service:
+      condition: service_healthy
+    auth_rpc_service:
+      condition: service_healthy
+
+x-bid-environment: &bid-environment
+  DB_HOST: postgres_bid
+  DB_PORT: 5432
+  DB_USER: ${BID_DB_USER}
+  DB_PASS: ${BID_DB_PASS}
+  DB_NAME: ${BID_DB_NAME}
+  ROOT_PATH: /bid
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+  RPC_API_URL: api_rpc_service:50051
+  RPC_PAYMENT_URL: payment_rpc_service:50052
+  RPC_AUTH_URL: auth_rpc_service:50054
   ENVIRONMENT:
   DEBUG:
 
@@ -319,6 +351,21 @@ services:
       - traefik_net        # Public access via Traefik
       - auth_service_net   # Database access
       - internal_net       # Inter-service communication
+
+  auth_rpc_service:
+    <<: *auth-base
+    container_name: auth_rpc_service
+    command: [ "python", "serve_rpc.py" ]
+    expose: [ "50054" ]
+    environment:
+      <<: *auth-environment
+    healthcheck:
+      <<: *healthcheck
+      test: [ "CMD-SHELL", "grpc_health_probe -addr=localhost:50054" ]
+    networks:
+      - auth_rpc_net
+      - auth_service_net
+      - internal_net
 
   auth_init_db:
     <<: *auth-base
@@ -613,22 +660,41 @@ services:
   favorites_service:
     <<: *favorites-base
     container_name: favorites_service
-    command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8006" ]
+    command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8006", "--log-level", "debug" ]
     depends_on:
       api_rpc_service:
         condition: service_healthy
       postgres_favorites:
         condition: service_healthy
-    restart: "unless-stopped"
+    restart: unless-stopped
     environment:
       <<: *favorites-environment
     healthcheck:
       <<: *healthcheck
-      test: [ "CMD-SHELL", "curl -f http://localhost:8006/health || exit 1" ]
+      test: ["CMD-SHELL", "curl -f http://localhost:8006/health || exit 1"]
     networks:
       - favorites_service_net
       - api_rpc_net
       - internal_net
+      - traefik_net
+
+  bid_service:
+    <<: *bid-base
+    container_name: bid_service
+    command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8007", "--log-level", "debug", "--proxy-headers" ]
+    expose: [ "8007" ]
+    environment:
+      <<: *bid-environment
+    restart: unless-stopped
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8007/health || exit 1"]
+    networks:
+      - bid_service_net
+      - internal_net
+      - api_rpc_net
+      - payment_rpc_net
+      - auth_rpc_net
       - traefik_net
 
 
@@ -894,6 +960,26 @@ services:
       - favorites_service_net
       - adminer_database_net
 
+  postgres_bid:
+    image: postgres:17.5
+    container_name: postgres_bid
+    volumes:
+      - pg_data_bid:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${BID_DB_USER}
+      - POSTGRES_PASSWORD=${BID_DB_PASS}
+      - POSTGRES_DB=${BID_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${BID_DB_USER} -d ${BID_DB_NAME}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - bid_service_net
+      - adminer_database_net
+
   # ======================================================================
   # 5.2 ADMINER DATABASE MANAGEMENT
   # ======================================================================
@@ -921,7 +1007,9 @@ services:
       - postgres_bot
       - postgres_carfax
       - postgres_payment
+      - postgres_calculator
       - postgres_favorites
+      - postgres_bid
 
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1" ]
@@ -1007,9 +1095,13 @@ services:
 # - Payment Service:   8002 (HTTP), 50052 (gRPC)
 # - Auth Service:      8003 (HTTP)
 # - Notification:      8004 (HTTP)
+# - Calculator:        8005 (HTTP)
+# - Favorites:         8006 (HTTP)
+# - Bid Service:       8007 (HTTP)
 # - Carfax Service:    8001 (HTTP), 50053 (gRPC)
+# - Auth RPC:          50054 (gRPC)
 # - RabbitMQ:          5672 (AMQP), 15672 (Management)
-# - Grafana:           3000 (accessible via /grafana/)
+# - Grafana:           3001 (accessible via /grafana/)
 #
 # COMMUNICATION PATTERNS:
 # - HTTP: Public APIs and inter-service REST calls
