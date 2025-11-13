@@ -14,29 +14,19 @@ http:
       tls: {}
       middlewares: [api-strip, cors]
 
-    payment-webhook:
-      entryPoints: [websecure]
-      rule: "Host(`api.vinas.lt`) && Path(`/payment/public/stripe/webhook`)"
+    payment:
+      entryPoints: [ websecure ]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/payment`)"
       service: payment
-      priority: 200
-      tls: {}
-      middlewares: [payment-strip, cors]
-
-    payment-public:
-      entryPoints: [websecure]
-      rule: "Host(`api.vinas.lt`) && (Path(`/payment/docs`) || PathPrefix(`/payment/docs/`) || Path(`/payment/openapi.json`))"
-      service: payment
-      priority: 190
-      tls: {}
-      middlewares: [payment-strip, cors]
+      priority: 45
+      middlewares: [ payment-strip, cors ]
 
     payment-protected:
-      entryPoints: [websecure]
+      entryPoints: [ websecure ]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/payment/private`)"
       service: payment
-      priority: 50
-      tls: {}
-      middlewares: [auth-forward, payment-strip, cors]
+      priority: 195
+      middlewares: [ cors, auth-forward, payment-strip ]
 
     calculator:
       entryPoints: [websecure]
