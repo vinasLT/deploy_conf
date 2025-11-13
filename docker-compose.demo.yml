@@ -230,7 +230,7 @@ x-calculator-environment: &calculator-environment
   DEBUG:
 
 x-favorites-base: &favorites-base
-  image: ivanskrb21/vinaslt_favorites_service:dev
+  image: ivanskrb21/vinaslt_favorites_service:main
   depends_on:
     postgres_favorites:
       condition: service_healthy
