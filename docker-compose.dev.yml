@@ -207,7 +207,7 @@ x-carfax-environment: &carfax-environment
 
 #Calculator Service Template
 x-calculator-base: &calculator-base
-  image: ivanskrb21/vinaslt_calculator_service:latest
+  image: ivanskrb21/vinaslt_calculator_service:dev
   depends_on:
     postgres_calculator:
       condition: service_healthy
