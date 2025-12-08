@@ -51,6 +51,12 @@ networks:
     driver: bridge
   bid_service_net:
     driver: bridge
+  order_service_net:
+    driver: bridge
+  file_service_net:
+    driver: bridge
+  file_rpc_net:
+    driver: bridge
 
   # Isolated RPC networks for secure gRPC communication
   carfax_rpc_net:
@@ -91,6 +97,8 @@ volumes:
   pg_data_calculator: # Calculator service data
   pg_data_favorites: # Favorites service data
   pg_data_bid: # Bid service data
+  pg_data_order: # Order service data
+  pg_data_file: # File service data
 
   # Caching volumes
   redis_auth_data: # Auth service cache
@@ -276,6 +284,57 @@ x-bid-environment: &bid-environment
   RPC_AUTH_URL: auth_rpc_service:50054
   ENVIRONMENT:
   DEBUG:
+
+# Order Service Template
+x-order-base: &order-base
+  image: ivanskrb21/vinaslt_order_service:dev
+  depends_on:
+    postgres_order:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+x-order-environment: &order-environment
+  DB_HOST: postgres_order
+  DB_PORT: 5432
+  DB_NAME: ${ORDER_DB_NAME}
+  DB_USER: ${ORDER_DB_USER}
+  DB_PASS: ${ORDER_DB_PASS}
+  DEBUG:
+  ROOT_PATH: /order
+  ENVIRONMENT:
+  RPC_CALCULATOR_URL: calculator_service:50052
+  RPC_API_URL: api_rpc_service:50051
+  RPC_AUTH_URL: auth_rpc_service:50054
+  RCP_FILE_URL: file_rpc_service:50055
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+
+# File Service Template
+x-file-base: &file-base
+  image: ivanskrb21/vinaslt_file_service:dev
+  depends_on:
+    postgres_file:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    api_rpc_service:
+      condition: service_healthy
+
+x-file-environment: &file-environment
+  DB_HOST: postgres_file
+  DB_PORT: 5432
+  DB_NAME: ${FILE_DB_NAME}
+  DB_USER: ${FILE_DB_USER}
+  DB_PASS: ${FILE_DB_PASS}
+  DEBUG:
+  ENVIRONMENT:
+  GRPC_SERVER_PORT: 50055
+  RPC_API_URL: api_rpc_service:50051
+  AWS_ACCESS_KEY_ID:
+  AWS_SECRET_ACCESS_KEY:
+  AWS_REGION:
+  S3_BUCKET:
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
 
 # Standard Health Check Template
 x-healthcheck: &healthcheck
@@ -773,6 +832,76 @@ services:
       - auth_rpc_net # gRPC access to auth service
       - traefik_net
 
+  # ----------------------------------------------------------------------
+  # 2.9 ORDER SERVICE
+  # ----------------------------------------------------------------------
+
+  order_service:
+    <<: *order-base
+    container_name: order_service
+    command:
+      [
+        "uvicorn",
+        "app.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8008",
+        "--log-level",
+        "debug",
+      ]
+    expose: ["8008"]
+    environment:
+      <<: *order-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8008/health || exit 1"]
+    networks:
+      - traefik_net
+      - order_service_net
+      - internal_net
+      - api_rpc_net
+      - payment_rpc_net
+      - auth_rpc_net
+      - file_rpc_net
+
+  # ----------------------------------------------------------------------
+  # 2.10 FILE SERVICE
+  # ----------------------------------------------------------------------
+
+  file_service:
+    <<: *file-base
+    container_name: file_service
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8009"]
+    expose: ["8009"]
+    environment:
+      <<: *file-environment
+    restart: unless-stopped
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8009/health || exit 1"]
+    networks:
+      - file_service_net
+      - internal_net
+      - api_rpc_net
+      - traefik_net
+
+  # File gRPC Service (Isolated for internal communication)
+  file_rpc_service:
+    <<: *file-base
+    container_name: file_rpc_service
+    command: ["python", "serve_rpc.py"]
+    expose: ["50055"]
+    environment:
+      <<: *file-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=file_rpc_service:50055"]
+    networks:
+      - file_rpc_net
+      - file_service_net
+      - internal_net
+
   # ======================================================================
   # 3. MESSAGE QUEUE SYSTEM
   # ======================================================================
@@ -1070,6 +1199,47 @@ services:
       - bid_service_net
       - adminer_database_net
 
+  postgres_order:
+    image: postgres:17.5
+    container_name: postgres_order
+    volumes:
+      - pg_data_order:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${ORDER_DB_USER}
+      - POSTGRES_PASSWORD=${ORDER_DB_PASS}
+      - POSTGRES_DB=${ORDER_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${ORDER_DB_USER} -d ${ORDER_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - order_service_net
+      - adminer_database_net
+
+  postgres_file:
+    image: postgres:17.5
+    container_name: postgres_file
+    volumes:
+      - pg_data_file:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${FILE_DB_USER}
+      - POSTGRES_PASSWORD=${FILE_DB_PASS}
+      - POSTGRES_DB=${FILE_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${FILE_DB_USER} -d ${FILE_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - file_service_net
+      - adminer_database_net
+
   # ======================================================================
   # 5.2 ADMINER DATABASE MANAGEMENT
   # ======================================================================
@@ -1100,6 +1270,8 @@ services:
       - postgres_calculator
       - postgres_favorites
       - postgres_bid
+      - postgres_order
+      - postgres_file
 
     healthcheck:
       test:

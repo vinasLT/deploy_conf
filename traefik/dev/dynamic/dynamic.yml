@@ -91,6 +91,20 @@ http:
       priority: 60
       middlewares: [ cors, auth-forward, bid-strip ]
 
+    order:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/order`)"
+      service: order
+      priority: 65
+      middlewares: [ cors, order-strip ]
+
+    order-protected:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/order/private`)"
+      service: order
+      priority: 70
+      middlewares: [ cors, auth-forward, order-strip ]
+
 
   services:
 
@@ -129,6 +143,11 @@ http:
         servers:
           - url: "http://bid_service:8007"
 
+    order:
+      loadBalancer:
+        servers:
+          - url: "http://order_service:8008"
+
     grafana:
       loadBalancer:
         servers:
@@ -156,6 +175,10 @@ http:
     bid-strip:
       stripPrefix:
         prefixes: [ "/bid" ]
+
+    order-strip:
+      stripPrefix:
+        prefixes: [ "/order" ]
 
     payment-strip:
       stripPrefix:
