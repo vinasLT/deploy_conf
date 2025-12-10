@@ -55,6 +55,8 @@ networks:
     driver: bridge
   file_service_net:
     driver: bridge
+  calculator_rpc_net:
+    driver: bridge
   file_rpc_net:
     driver: bridge
 
@@ -233,6 +235,7 @@ x-calculator-environment: &calculator-environment
   ROOT_PATH: /calculator
   REDIS_URL: redis://redis_calculator:6379/0
   RPC_API_URL: api_rpc_service:50051
+  GRPC_SERVER_PORT: 50052
   ENVIRONMENT:
   DEBUG:
 
@@ -303,7 +306,7 @@ x-order-environment: &order-environment
   DEBUG:
   ROOT_PATH: /order
   ENVIRONMENT:
-  RPC_CALCULATOR_URL: calculator_service:50052
+  RPC_CALCULATOR_URL: calculator_rpc_service:50052
   RPC_API_URL: api_rpc_service:50051
   RPC_AUTH_URL: auth_rpc_service:50054
   RCP_FILE_URL: file_rpc_service:50055
@@ -755,6 +758,23 @@ services:
       - traefik_net
       - api_rpc_net
 
+  # Calculator gRPC Service (Isolated for internal communication)
+  calculator_rpc_service:
+    <<: *calculator-base
+    container_name: calculator_rpc_service
+    command: ["python", "serve_rpc.py"]
+    expose: ["50052"]
+    environment:
+      <<: *calculator-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=calculator_rpc_service:50052"]
+    networks:
+      - calculator_rpc_net
+      - calculator_service_net
+      - api_rpc_net
+      - internal_net
+
     # Initial Data Load Service (runs once to populate DB)
   calculator_init_db:
     <<: *calculator-base
@@ -863,6 +883,7 @@ services:
       - api_rpc_net
       - payment_rpc_net
       - auth_rpc_net
+      - calculator_rpc_net
       - file_rpc_net
 
   # ----------------------------------------------------------------------
