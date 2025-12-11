@@ -762,7 +762,7 @@ services:
   calculator_rpc_service:
     <<: *calculator-base
     container_name: calculator_rpc_service
-    command: ["python", "serve_rpc.py"]
+    command: ["python", "app/serve_rpc.py"]
     expose: ["50052"]
     environment:
       <<: *calculator-environment
