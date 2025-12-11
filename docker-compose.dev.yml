@@ -297,7 +297,6 @@ x-order-base: &order-base
     rabbitmq:
       condition: service_healthy
 
-
 x-order-environment: &order-environment
   DB_HOST: postgres_order
   DB_PORT: 5432
@@ -352,17 +351,17 @@ x-healthcheck: &healthcheck
 # ========================================================================
 
 services:
-  frontend:
-    image: timakaa/vinas-frontend:dev
-    container_name: frontend
-    platform: linux/amd64
-    restart: unless-stopped
-    ports:
-     - "3000:3000"
-    networks:
-     - traefik_net
-    environment:
-     - NEXT_PUBLIC_API_URL=http://localhost
+#  frontend:
+#    image: timakaa/vinas-frontend:dev
+#    container_name: frontend
+#    platform: linux/amd64
+#    restart: unless-stopped
+#    ports:
+#     - "3000:3000"
+#    networks:
+#     - traefik_net
+#    environment:
+#     - NEXT_PUBLIC_API_URL=http://localhost
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
@@ -494,7 +493,6 @@ services:
       - SMPT_PORT
       - EMAIL_PASSWORD
       - DEBUG
-      - TELEGRAM_BOT_TOKEN
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -764,7 +762,7 @@ services:
   calculator_rpc_service:
     <<: *calculator-base
     container_name: calculator_rpc_service
-    command: ["python", "app/serve_rpc.py"]
+    command: ["python", "serve_rpc.py"]
     expose: ["50052"]
     environment:
       <<: *calculator-environment
@@ -772,10 +770,10 @@ services:
       <<: *healthcheck
       test: ["CMD-SHELL", "grpc_health_probe -addr=calculator_rpc_service:50052"]
     networks:
-      - calculator_rpc_net # Isolated gRPC network
-      - calculator_service_net # Database access
-      - api_rpc_net # gRPC access to API service
-      - internal_net # Internal services access
+      - calculator_rpc_net
+      - calculator_service_net
+      - api_rpc_net
+      - internal_net
 
     # Initial Data Load Service (runs once to populate DB)
   calculator_init_db:
@@ -883,9 +881,9 @@ services:
       - order_service_net
       - internal_net
       - api_rpc_net
-      - calculator_rpc_net
       - payment_rpc_net
       - auth_rpc_net
+      - calculator_rpc_net
       - file_rpc_net
 
   # ----------------------------------------------------------------------
