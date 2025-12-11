@@ -67,6 +67,8 @@ networks:
     driver: bridge
   auth_rpc_net:
     driver: bridge
+  calculator_rpc_net:
+    driver: bridge
 
   # Infrastructure networks
   adminer_database_net:
@@ -232,6 +234,7 @@ x-calculator-environment: &calculator-environment
   DB_NAME: ${CALCULATOR_DB_NAME}
   ROOT_PATH: /calculator
   REDIS_URL: redis://redis_calculator:6379/0
+  GRPC_SERVER_PORT: 50052
   RPC_API_URL: api_rpc_service:50051
   ENVIRONMENT:
   DEBUG:
@@ -294,6 +297,7 @@ x-order-base: &order-base
     rabbitmq:
       condition: service_healthy
 
+
 x-order-environment: &order-environment
   DB_HOST: postgres_order
   DB_PORT: 5432
@@ -303,7 +307,7 @@ x-order-environment: &order-environment
   DEBUG:
   ROOT_PATH: /order
   ENVIRONMENT:
-  RPC_CALCULATOR_URL: calculator_service:50052
+  RPC_CALCULATOR_URL: calculator_rpc_service:50052
   RPC_API_URL: api_rpc_service:50051
   RPC_AUTH_URL: auth_rpc_service:50054
   RCP_FILE_URL: file_rpc_service:50055
@@ -348,17 +352,17 @@ x-healthcheck: &healthcheck
 # ========================================================================
 
 services:
-#  frontend:
-#    image: timakaa/vinas-frontend:dev
-#    container_name: frontend
-#    platform: linux/amd64
-#    restart: unless-stopped
-#    ports:
-#     - "3000:3000"
-#    networks:
-#     - traefik_net
-#    environment:
-#     - NEXT_PUBLIC_API_URL=http://localhost
+  frontend:
+    image: timakaa/vinas-frontend:dev
+    container_name: frontend
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+     - "3000:3000"
+    networks:
+     - traefik_net
+    environment:
+     - NEXT_PUBLIC_API_URL=http://localhost
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
@@ -490,6 +494,7 @@ services:
       - SMPT_PORT
       - EMAIL_PASSWORD
       - DEBUG
+      - TELEGRAM_BOT_TOKEN
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -755,6 +760,23 @@ services:
       - traefik_net
       - api_rpc_net
 
+  # Calculator gRPC Service (Isolated for internal communication)
+  calculator_rpc_service:
+    <<: *calculator-base
+    container_name: calculator_rpc_service
+    command: ["python", "app/serve_rpc.py"]
+    expose: ["50052"]
+    environment:
+      <<: *calculator-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=calculator_rpc_service:50052"]
+    networks:
+      - calculator_rpc_net # Isolated gRPC network
+      - calculator_service_net # Database access
+      - api_rpc_net # gRPC access to API service
+      - internal_net # Internal services access
+
     # Initial Data Load Service (runs once to populate DB)
   calculator_init_db:
     <<: *calculator-base
@@ -861,6 +883,7 @@ services:
       - order_service_net
       - internal_net
       - api_rpc_net
+      - calculator_rpc_net
       - payment_rpc_net
       - auth_rpc_net
       - file_rpc_net
