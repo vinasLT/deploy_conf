@@ -351,17 +351,17 @@ x-healthcheck: &healthcheck
 # ========================================================================
 
 services:
-  frontend:
-    image: vinasfront/vinas-frontend:dev
-    container_name: frontend
-    platform: linux/amd64
-    restart: unless-stopped
-    ports:
-     - "3000:3000"
-    networks:
-     - traefik_net
-    environment:
-     - NEXT_PUBLIC_API_URL=http://localhost
+#  frontend:
+#    image: vinasfront/vinas-frontend:dev
+#    container_name: frontend
+#    platform: linux/amd64
+#    restart: unless-stopped
+#    ports:
+#     - "3000:3000"
+#    networks:
+#     - traefik_net
+#    environment:
+#     - NEXT_PUBLIC_API_URL=http://localhost
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
@@ -493,6 +493,7 @@ services:
       - SMPT_PORT
       - EMAIL_PASSWORD
       - DEBUG
+      - TELEGRAM_BOT_TOKEN
     depends_on:
       rabbitmq:
         condition: service_healthy
