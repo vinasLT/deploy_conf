@@ -481,6 +481,7 @@ services:
       - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
       - ROOT_PATH=/notification
       - ENVIRONMENT
+      - TELEGRAM_BOT_TOKEN
       - RABBITMQ_EXCHANGE_NAME
       - RABBITMQ_QUEUE_NAME
       # Twilio configuration for SMS
