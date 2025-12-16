@@ -194,7 +194,7 @@ x-payment-environment: &payment-environment
 
 # Carfax Service Template
 x-carfax-base: &carfax-base
-  image: ivanskrb21/vinaslt_carfax_service:latest
+  image: ivanskrb21/vinaslt_carfax_service:dev
   entrypoint: ["/app/entrypoint.sh"]
   depends_on:
     postgres_carfax:
@@ -351,17 +351,17 @@ x-healthcheck: &healthcheck
 # ========================================================================
 
 services:
-#  frontend:
-#    image: vinasfront/vinas-frontend:dev
-#    container_name: frontend
-#    platform: linux/amd64
-#    restart: unless-stopped
-#    ports:
-#     - "3000:3000"
-#    networks:
-#     - traefik_net
-#    environment:
-#     - NEXT_PUBLIC_API_URL=http://localhost
+  frontend:
+    image: vinasfront/vinas-frontend:dev
+    container_name: frontend
+    platform: linux/amd64
+    restart: unless-stopped
+    ports:
+     - "3000:3000"
+    networks:
+     - traefik_net
+    environment:
+     - NEXT_PUBLIC_API_URL=http://localhost
 
   # ======================================================================
   # 1. REVERSE PROXY & LOAD BALANCER
@@ -663,6 +663,7 @@ services:
     networks:
       - carfax_service_net
       - internal_net
+      - traefik_net
 
   # Carfax gRPC Service (Isolated for internal communication)
   carfax_rpc_service:

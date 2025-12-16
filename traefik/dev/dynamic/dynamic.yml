@@ -105,6 +105,20 @@ http:
       priority: 70
       middlewares: [ cors, auth-forward, order-strip ]
 
+    carfax:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/carfax`)"
+      service: carfax
+      priority: 70
+      middlewares: [cors, carfax-strip]
+
+    carfax-protected:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/carfax/private`)"
+      service: carfax
+      priority: 75
+      middlewares: [cors, auth-forward, carfax-strip]
+
 
   services:
 
@@ -148,6 +162,11 @@ http:
         servers:
           - url: "http://order_service:8008"
 
+    carfax:
+      loadBalancer:
+        servers:
+          - url: "http://carfax_service:8001"
+
     grafana:
       loadBalancer:
         servers:
@@ -187,6 +206,10 @@ http:
     notification-strip:
       stripPrefix:
         prefixes: ["/notification"]
+
+    carfax-strip:
+      stripPrefix:
+        prefixes: ["/carfax"]
 
     rabbitmq-strip:
       stripPrefix:
