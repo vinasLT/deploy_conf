@@ -107,6 +107,39 @@ http:
       tls: {}
       middlewares: [cors, auth-forward, bid-strip]
 
+    order:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/order`)"
+      service: order
+      priority: 65
+      tls: {}
+      middlewares: [order-strip, cors]
+
+    order-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/order/private`)"
+      service: order
+      priority: 70
+      tls: {}
+      middlewares: [cors, auth-forward, order-strip]
+
+    carfax:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/carfax`)"
+      service: carfax
+      priority: 70
+      tls: {}
+      middlewares: [carfax-strip, cors]
+
+    carfax-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/carfax/private`)"
+      service: carfax
+      priority: 75
+      tls: {}
+      middlewares: [cors, auth-forward, carfax-strip]
+
+
   services:
     frontend:
       loadBalancer:
@@ -148,6 +181,16 @@ http:
         servers:
           - url: "http://bid_service:8007"
 
+    order:
+      loadBalancer:
+        servers:
+          - url: "http://order_service:8008"
+
+    carfax:
+      loadBalancer:
+        servers:
+          - url: "http://carfax_service:8001"
+
     grafana:
       loadBalancer:
         servers:
@@ -179,10 +222,6 @@ http:
       stripPrefix:
         prefixes: ["/notification"]
 
-    rabbitmq-strip:
-      stripPrefix:
-        prefixes: ["/rabbitmq"]
-
     favorites-strip:
       stripPrefix:
         prefixes: ["/favorites"]
@@ -190,6 +229,18 @@ http:
     bid-strip:
       stripPrefix:
         prefixes: ["/bid"]
+
+    order-strip:
+      stripPrefix:
+        prefixes: ["/order"]
+
+    carfax-strip:
+      stripPrefix:
+        prefixes: ["/carfax"]
+
+    rabbitmq-strip:
+      stripPrefix:
+        prefixes: ["/rabbitmq"]
 
     cors:
       headers:
