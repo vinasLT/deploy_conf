@@ -617,6 +617,7 @@ services:
     networks:
       - carfax_service_net
       - internal_net
+      - traefik_net
 
   # Carfax gRPC Service (Isolated for internal communication)
   carfax_rpc_service:
