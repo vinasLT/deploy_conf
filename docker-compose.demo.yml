@@ -99,7 +99,8 @@ volumes:
   pg_data_calculator:   # Calculator service data
   pg_data_favorites:    # Favorites service data
   pg_data_bid:          # Bid service data
-  pg_data_file:         #File service data
+  pg_data_file:         # File service data
+  pg_data_order:        # Order service data
 
   # Caching volumes
   redis_auth_data:      # Auth service cache
