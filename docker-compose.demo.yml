@@ -354,12 +354,10 @@ x-healthcheck: &healthcheck
 
 services:
 
-
   frontend:
-    image: timakaa/vinas-frontend:demo
+    image: vinasfront/vinas-frontend:demo
     container_name: frontend
     restart: unless-stopped
-
     expose:
       - 3000
     networks:
