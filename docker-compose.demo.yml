@@ -121,7 +121,7 @@ volumes:
 
 # Auth Service Template
 x-auth-base: &auth-base
-  image: ivanskrb21/vinaslt_auth_service:dev
+  image: ivanskrb21/vinaslt_auth_service:main
   depends_on:
     postgres_auth:
       condition: service_healthy
@@ -151,7 +151,7 @@ x-auth-environment: &auth-environment
 
 # API Service Template
 x-api-base: &api-base
-  image: ivanskrb21/vinaslt_api_service:dev
+  image: ivanskrb21/vinaslt_api_service:main
   depends_on:
     redis_api_service:
       condition: service_healthy
@@ -262,7 +262,7 @@ x-favorites-environment: &favorites-environment
   DEBUG:
 
 x-bid-base: &bid-base
-  image: ivanskrb21/vinaslt_bid_service:dev
+  image: ivanskrb21/vinaslt_bid_service:main
   depends_on:
     postgres_bid:
       condition: service_healthy
@@ -291,7 +291,7 @@ x-bid-environment: &bid-environment
 
 # Order Service Template
 x-order-base: &order-base
-  image: ivanskrb21/vinaslt_order_service:dev
+  image: ivanskrb21/vinaslt_order_service:main
   depends_on:
     postgres_order:
       condition: service_healthy
@@ -315,7 +315,7 @@ x-order-environment: &order-environment
 
 # File Service Template
 x-file-base: &file-base
-  image: ivanskrb21/vinaslt_file_service:dev
+  image: ivanskrb21/vinaslt_file_service:main
   depends_on:
     postgres_file:
       condition: service_healthy
