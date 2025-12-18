@@ -51,6 +51,12 @@ networks:
     driver: bridge
   bid_service_net:
     driver: bridge
+  order_service_net:
+    driver: bridge
+  file_service_net:
+    driver: bridge
+  file_rpc_net:
+    driver: bridge
 
   # Isolated RPC networks for secure gRPC communication
   carfax_rpc_net:
@@ -60,6 +66,8 @@ networks:
   api_rpc_net:
     driver: bridge
   auth_rpc_net:
+    driver: bridge
+  calculator_rpc_net:
     driver: bridge
 
   # Infrastructure networks
@@ -91,6 +99,8 @@ volumes:
   pg_data_calculator:   # Calculator service data
   pg_data_favorites:    # Favorites service data
   pg_data_bid:          # Bid service data
+  pg_data_order:        # Order service data
+  pg_data_file:         # File service data
 
   # Caching volumes
   redis_auth_data:      # Auth service cache
@@ -127,6 +137,8 @@ x-auth-environment: &auth-environment
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
   REDIS_URL: redis://redis_auth:6379
   ROOT_PATH: /auth
+  GRPC_SERVER_PORT: 50054
+  RPC_PAYMENT_URL: payment_rpc_service:50053
   ENVIRONMENT:
   RABBITMQ_EXCHANGE_NAME:
   # AWS KMS integration for encryption
@@ -161,7 +173,7 @@ x-api-environment: &api-environment
 
 # Payment Service Template
 x-payment-base: &payment-base
-  image: ivanskrb21/vinaslt_payment_service:latest
+  image: ivanskrb21/vinaslt_payment_service:dev
   depends_on:
     postgres_payment:
       condition: service_healthy
@@ -173,7 +185,7 @@ x-payment-environment: &payment-environment
   DB_PASS: ${PAYMENT_DB_PASS}
   DB_USER: ${PAYMENT_DB_USER}
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-  GRPC_SERVER_PORT: 50052
+  GRPC_SERVER_PORT: 50053
   STRIPE_SECRET_KEY:
   STRIPE_WEBHOOK_SECRET:
   PAYPAL_CLIENT_ID:
@@ -183,8 +195,7 @@ x-payment-environment: &payment-environment
 
 # Carfax Service Template
 x-carfax-base: &carfax-base
-  image: ivanskrb21/vinaslt_carfax_service:latest
-  restart: unless-stopped
+  image: ivanskrb21/vinaslt_carfax_service:dev
   entrypoint: ["/app/entrypoint.sh"]
   depends_on:
     postgres_carfax:
@@ -201,7 +212,7 @@ x-carfax-environment: &carfax-environment
   ROOT_PATH: /carfax
   GRPC_SERVER_PORT: 50053
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-  PAYMENT_SERVICE_RPC_URL: payment_rpc_service:50052
+  PAYMENT_SERVICE_RPC_URL: payment_rpc_service:50053
   COMPANY_LINK:
   CARFAX_API_TOKEN:
   ENVIRONMENT:
@@ -209,7 +220,7 @@ x-carfax-environment: &carfax-environment
 
 #Calculator Service Template
 x-calculator-base: &calculator-base
-  image: ivanskrb21/vinaslt_calculator_service:main
+  image: ivanskrb21/vinaslt_calculator_service:dev
   depends_on:
     postgres_calculator:
       condition: service_healthy
@@ -225,6 +236,7 @@ x-calculator-environment: &calculator-environment
   DB_NAME: ${CALCULATOR_DB_NAME}
   ROOT_PATH: /calculator
   REDIS_URL: redis://redis_calculator:6379/0
+  GRPC_SERVER_PORT: 50052
   RPC_API_URL: api_rpc_service:50051
   ENVIRONMENT:
   DEBUG:
@@ -271,10 +283,61 @@ x-bid-environment: &bid-environment
   ROOT_PATH: /bid
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
   RPC_API_URL: api_rpc_service:50051
-  RPC_PAYMENT_URL: payment_rpc_service:50052
+  RPC_PAYMENT_URL: payment_rpc_service:50053
   RPC_AUTH_URL: auth_rpc_service:50054
   ENVIRONMENT:
   DEBUG:
+
+# Order Service Template
+x-order-base: &order-base
+  image: ivanskrb21/vinaslt_order_service:dev
+  depends_on:
+    postgres_order:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+
+x-order-environment: &order-environment
+  DB_HOST: postgres_order
+  DB_PORT: 5432
+  DB_NAME: ${ORDER_DB_NAME}
+  DB_USER: ${ORDER_DB_USER}
+  DB_PASS: ${ORDER_DB_PASS}
+  DEBUG:
+  ROOT_PATH: /order
+  ENVIRONMENT:
+  RPC_CALCULATOR_URL: calculator_rpc_service:50052
+  RPC_API_URL: api_rpc_service:50051
+  RPC_AUTH_URL: auth_rpc_service:50054
+  RCP_FILE_URL: file_rpc_service:50055
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+
+# File Service Template
+x-file-base: &file-base
+  image: ivanskrb21/vinaslt_file_service:dev
+  depends_on:
+    postgres_file:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    api_rpc_service:
+      condition: service_healthy
+
+x-file-environment: &file-environment
+  DB_HOST: postgres_file
+  DB_PORT: 5432
+  DB_NAME: ${FILE_DB_NAME}
+  DB_USER: ${FILE_DB_USER}
+  DB_PASS: ${FILE_DB_PASS}
+  DEBUG:
+  ENVIRONMENT:
+  GRPC_SERVER_PORT: 50055
+  RPC_API_URL: api_rpc_service:50051
+  AWS_ACCESS_KEY_ID:
+  AWS_SECRET_ACCESS_KEY:
+  AWS_REGION:
+  S3_BUCKET:
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
 
 
 # Standard Health Check Template
@@ -519,7 +582,7 @@ services:
     container_name: payment_rpc_service
     entrypoint: ["/app/entrypoint.sh"]
     command: ["python", "serve_rpc.py"]
-    expose: ["50052"]
+    expose: ["50053"]
     environment:
       <<: *payment-environment
     depends_on:
@@ -529,7 +592,7 @@ services:
         condition: service_healthy
     healthcheck:
       <<: *healthcheck
-      test: ["CMD-SHELL", "grpc_health_probe -addr=payment_rpc_service:50052"]
+      test: ["CMD-SHELL", "grpc_health_probe -addr=payment_rpc_service:50053"]
     networks:
       - payment_rpc_net     # Isolated gRPC network
       - payment_service_net # Database access
@@ -625,20 +688,38 @@ services:
 
   # HTTP Calculator Service
   calculator_service:
-      <<: *calculator-base
-      container_name: calculator_service
-      command: [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005", "--log-level", "debug" ]
-      expose: [ "8005" ]
-      environment:
-        <<: *calculator-environment
-      healthcheck:
-        <<: *healthcheck
-        test: ["CMD-SHELL", "curl -f http://localhost:8005/health || exit 1"]
-      networks:
-        - calculator_service_net
-        - internal_net
-        - traefik_net
-        - api_rpc_net
+    <<: *calculator-base
+    container_name: calculator_service
+    command:
+      [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8005", "--log-level", "debug" ]
+    expose: ["8005"]
+    environment:
+      <<: *calculator-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8005/health || exit 1"]
+    networks:
+      - calculator_service_net
+      - internal_net
+      - traefik_net
+      - api_rpc_net
+
+  # Calculator gRPC Service (Isolated for internal communication)
+  calculator_rpc_service:
+    <<: *calculator-base
+    container_name: calculator_rpc_service
+    command: ["python", "app/serve_rpc.py"]
+    expose: ["50052"]
+    environment:
+      <<: *calculator-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=calculator_rpc_service:50052"]
+    networks:
+      - calculator_rpc_net
+      - calculator_service_net
+      - api_rpc_net
+      - internal_net
 
     # Initial Data Load Service (runs once to populate DB)
   calculator_init_db:
@@ -698,6 +779,94 @@ services:
       - payment_rpc_net
       - auth_rpc_net
       - traefik_net
+
+  # ----------------------------------------------------------------------
+  # 2.9 ORDER SERVICE
+  # ----------------------------------------------------------------------
+
+  order_service:
+    <<: *order-base
+    container_name: order_service
+    command:
+      [ "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8008", "--log-level", "debug" ]
+    expose: ["8008"]
+    environment:
+      <<: *order-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8008/health || exit 1"]
+    networks:
+      - traefik_net
+      - order_service_net
+      - internal_net
+      - api_rpc_net
+      - payment_rpc_net
+      - auth_rpc_net
+      - calculator_rpc_net
+      - file_rpc_net
+
+  # ----------------------------------------------------------------------
+  # 2.10 FILE SERVICE
+  # ----------------------------------------------------------------------
+
+  file_service:
+    <<: *file-base
+    container_name: file_service
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8009"]
+    expose: ["8009"]
+    environment:
+      <<: *file-environment
+    restart: unless-stopped
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "curl -f http://localhost:8009/health || exit 1"]
+    networks:
+      - file_service_net
+      - internal_net
+      - api_rpc_net
+      - traefik_net
+
+  file_service_worker:
+    <<: *file-base
+    container_name: file_service_worker
+    command:
+      [ "poetry", "run", "celery", "-A", "app.celery_app.celery_app", "worker", "--loglevel=info" ]
+    environment:
+      <<: *file-environment
+    restart: unless-stopped
+    networks:
+      - file_service_net
+      - internal_net
+      - api_rpc_net
+
+  file_service_celery_beat:
+    <<: *file-base
+    container_name: file_service_celery_beat
+    command:
+      [ "poetry", "run", "celery", "-A", "app.celery_app.celery_app", "beat", "--loglevel=debug", "--scheduler=celery.beat:Scheduler" ]
+    environment:
+      <<: *file-environment
+    restart: unless-stopped
+    networks:
+      - file_service_net
+      - internal_net
+      - api_rpc_net
+
+  # File gRPC Service (Isolated for internal communication)
+  file_rpc_service:
+    <<: *file-base
+    container_name: file_rpc_service
+    command: ["python", "serve_rpc.py"]
+    expose: ["50055"]
+    environment:
+      <<: *file-environment
+    healthcheck:
+      <<: *healthcheck
+      test: ["CMD-SHELL", "grpc_health_probe -addr=file_rpc_service:50055"]
+    networks:
+      - file_rpc_net
+      - file_service_net
+      - internal_net
 
 
   # ======================================================================
@@ -982,6 +1151,47 @@ services:
       - bid_service_net
       - adminer_database_net
 
+  postgres_order:
+    image: postgres:17.5
+    container_name: postgres_order
+    volumes:
+      - pg_data_order:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${ORDER_DB_USER}
+      - POSTGRES_PASSWORD=${ORDER_DB_PASS}
+      - POSTGRES_DB=${ORDER_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pg_isready -U ${ORDER_DB_USER} -d ${ORDER_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - order_service_net
+      - adminer_database_net
+
+  postgres_file:
+    image: postgres:17.5
+    container_name: postgres_file
+    volumes:
+      - pg_data_file:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${FILE_DB_USER}
+      - POSTGRES_PASSWORD=${FILE_DB_PASS}
+      - POSTGRES_DB=${FILE_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${FILE_DB_USER} -d ${FILE_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - file_service_net
+      - adminer_database_net
+
   # ======================================================================
   # 5.2 ADMINER DATABASE MANAGEMENT
   # ======================================================================
@@ -1012,6 +1222,8 @@ services:
       - postgres_calculator
       - postgres_favorites
       - postgres_bid
+      - postgres_order
+      - postgres_file
 
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1" ]
@@ -1092,22 +1304,23 @@ services:
 # ========================================================================
 #
 # SERVICE PORTS:
-# - Traefik:           80 (HTTP), 8080 (Dashboard)
-# - API Service:       8000 (HTTP), 50051 (gRPC)
-# - Payment Service:   8002 (HTTP), 50052 (gRPC)
-# - Auth Service:      8003 (HTTP)
-# - Notification:      8004 (HTTP)
-# - Calculator:        8005 (HTTP)
-# - Favorites:         8006 (HTTP)
-# - Bid Service:       8007 (HTTP)
-# - Carfax Service:    8001 (HTTP), 50053 (gRPC)
-# - Auth RPC:          50054 (gRPC)
-# - RabbitMQ:          5672 (AMQP), 15672 (Management)
-# - Grafana:           3001 (accessible via /grafana/)
+# - Traefik:             80 (HTTP), 8080 (Dashboard)
+# - API Service / RPC:   8000 (HTTP), 50051 (gRPC)
+# - Payment Service / RPC: 8002 (HTTP), 50053 (gRPC)
+# - Auth Service / RPC:  8003 (HTTP), 50054 (gRPC)
+# - Carfax Service / RPC: 8001 (HTTP), 50053 (gRPC)
+# - Notification:        8004 (HTTP)
+# - Calculator / RPC:    8005 (HTTP), 50052 (gRPC)
+# - Favorites:           8006 (HTTP)
+# - Bid Service:         8007 (HTTP)
+# - Order Service:       8008 (HTTP)
+# - File Service / RPC:  8009 (HTTP), 50055 (gRPC)
+# - RabbitMQ:            5672 (AMQP), 15672 (Management)
+# - Grafana:             3001 (accessible via /grafana/)
 #
 # COMMUNICATION PATTERNS:
 # - HTTP: Public APIs and inter-service REST calls
-# - gRPC: High-performance internal service communication
+# - gRPC: High-performance internal service communication across api_rpc_net, payment_rpc_net, auth_rpc_net, carfax_rpc_net, calculator_rpc_net, and file_rpc_net
 # - RabbitMQ: Asynchronous event-driven communication
 # - Redis: Caching and session storage
 #

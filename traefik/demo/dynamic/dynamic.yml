@@ -85,6 +85,70 @@ http:
       tls: {}
       middlewares: [auth-strip, cors]
 
+    favorites:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/favorites`)"
+      service: favorites
+      priority: 70
+      tls: {}
+      middlewares: [favorites-strip, cors]
+
+    favorites-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/favorites/private`)"
+      service: favorites
+      priority: 90
+      tls: {}
+      middlewares: [auth-forward, favorites-strip, cors]
+
+    bid:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/bid`)"
+      service: bid
+      priority: 55
+      tls: {}
+      middlewares: [bid-strip, cors]
+
+    bid-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/bid/private`)"
+      service: bid
+      priority: 60
+      tls: {}
+      middlewares: [auth-forward, bid-strip, cors]
+
+    order:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/order`)"
+      service: order
+      priority: 65
+      tls: {}
+      middlewares: [order-strip, cors]
+
+    order-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/order/private`)"
+      service: order
+      priority: 70
+      tls: {}
+      middlewares: [auth-forward, order-strip, cors]
+
+    carfax:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/carfax`)"
+      service: carfax
+      priority: 70
+      tls: {}
+      middlewares: [carfax-strip, cors]
+
+    carfax-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/carfax/private`)"
+      service: carfax
+      priority: 75
+      tls: {}
+      middlewares: [auth-forward, carfax-strip, cors]
+
   services:
     frontend:
       loadBalancer:
@@ -116,6 +180,26 @@ http:
         servers:
           - url: "http://notification_service:8004"
 
+    favorites:
+      loadBalancer:
+        servers:
+          - url: "http://favorites_service:8006"
+
+    bid:
+      loadBalancer:
+        servers:
+          - url: "http://bid_service:8007"
+
+    order:
+      loadBalancer:
+        servers:
+          - url: "http://order_service:8008"
+
+    carfax:
+      loadBalancer:
+        servers:
+          - url: "http://carfax_service:8001"
+
     grafana:
       loadBalancer:
         servers:
@@ -146,6 +230,22 @@ http:
     notification-strip:
       stripPrefix:
         prefixes: ["/notification"]
+
+    favorites-strip:
+      stripPrefix:
+        prefixes: ["/favorites"]
+
+    bid-strip:
+      stripPrefix:
+        prefixes: ["/bid"]
+
+    order-strip:
+      stripPrefix:
+        prefixes: ["/order"]
+
+    carfax-strip:
+      stripPrefix:
+        prefixes: ["/carfax"]
 
     rabbitmq-strip:
       stripPrefix:
