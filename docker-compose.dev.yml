@@ -269,6 +269,8 @@ x-bid-base: &bid-base
       condition: service_healthy
     api_rpc_service:
       condition: service_healthy
+    calculator_rpc_service:
+      condition: service_healthy
     payment_rpc_service:
       condition: service_healthy
     auth_rpc_service:
@@ -283,6 +285,7 @@ x-bid-environment: &bid-environment
   ROOT_PATH: /bid
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
   RPC_API_URL: api_rpc_service:50051
+  RPC_CALCULATOR_URL: calculator_rpc_service:50052
   RPC_PAYMENT_URL: payment_rpc_service:50053
   RPC_AUTH_URL: auth_rpc_service:50054
   ENVIRONMENT:
@@ -851,6 +854,7 @@ services:
       - bid_service_net # Database access
       - internal_net # RabbitMQ communication
       - api_rpc_net # gRPC access to API service
+      - calculator_rpc_net # gRPC access to calculator service
       - payment_rpc_net # gRPC access to payment service
       - auth_rpc_net # gRPC access to auth service
       - traefik_net
