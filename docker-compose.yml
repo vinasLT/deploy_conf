@@ -358,7 +358,7 @@ x-healthcheck: &healthcheck
 services:
 
   frontend:
-    image: vinasfront/vinas-frontend:demo
+    image: vinasfront/vinas-frontend:prod
     container_name: frontend
     restart: unless-stopped
     expose:
