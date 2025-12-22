@@ -48,7 +48,9 @@ jobs:
               echo "Infisical login failed or returned empty token"
               exit 2
             fi
-            git pull origin "$DEPLOY_BRANCH"
+            git fetch origin "$DEPLOY_BRANCH"
+            git reset --hard "origin/$DEPLOY_BRANCH"
+            git clean -fd
             docker compose -f "$COMPOSE_FILE" pull
             
             docker compose -f "$COMPOSE_FILE" down
