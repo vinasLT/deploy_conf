@@ -251,7 +251,7 @@ http:
           - DELETE
           - OPTIONS
         accessControlAllowOriginList:
-          - "https://demo.vinas.lt"
+          - "https://vinas.lt"
         accessControlAllowHeaders:
           - "Content-Type"
           - "Authorization"
