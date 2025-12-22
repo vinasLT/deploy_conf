@@ -1,0 +1,26 @@
+# Traefik v3 Configuration для localhost (без сертификатов)
+
+# Логирование
+log:
+  level: DEBUG
+
+# Логи доступа
+accessLog:
+  filePath: /logs/access.log
+
+# API и Dashboard
+api:
+  dashboard: true
+  insecure: true  # Для localhost это безопасно
+
+# Точки входа
+entryPoints:
+  web:
+    address: ":80"
+
+# Провайдеры
+providers:
+  docker:
+    exposedByDefault: false
+  file:
+    filename: /etc/traefik/dynamic/dynamic.yml
