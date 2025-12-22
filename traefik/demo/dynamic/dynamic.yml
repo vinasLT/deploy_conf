@@ -5,6 +5,13 @@ http:
       rule: "Host(`demo.vinas.lt`)"
       service: frontend
       priority: 10
+      tls:
+        certResolver: letsencrypt
+        domains:
+          - main: demo.vinas.lt
+            sans:
+              - api.demo.vinas.lt
+              - adminer.demo.vinas.lt
 
     api:
       entryPoints: [websecure]
