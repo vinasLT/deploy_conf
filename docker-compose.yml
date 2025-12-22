@@ -387,9 +387,9 @@ services:
       - "443:443"      # HTTPS traffic
       - "8080:8080"  # Traefik dashboard
     volumes:
-      - ./traefik/demo/traefik.yml:/etc/traefik/traefik.yml:ro
-      - ./traefik/demo/dynamic:/etc/traefik/dynamic:ro
-      - ./traefik/demo/logs:/logs
+      - ./traefik/production/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/production/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/production/logs:/logs
       - traefik_letsencrypt:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket access
     networks:
