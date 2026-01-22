@@ -729,6 +729,7 @@ services:
       - telegram_bot_net # Bot database access
       - internal_net # HTTP service communication
 
+
   # ----------------------------------------------------------------------
   # 2.7 CALCULATOR SERVICE (HTTP + INITIAL DATA LOAD)
   # ----------------------------------------------------------------------
