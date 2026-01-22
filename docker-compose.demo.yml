@@ -292,6 +292,7 @@ x-bid-environment: &bid-environment
   ENVIRONMENT:
   DEBUG:
 
+
 # Order Service Template
 x-order-base: &order-base
   image: ivanskrb21/vinaslt_order_service:main
