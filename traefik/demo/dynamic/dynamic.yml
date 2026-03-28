@@ -28,6 +28,7 @@ http:
       priority: 45
       middlewares: [ payment-strip, cors ]
 
+
     payment-protected:
       entryPoints: [ websecure ]
       rule: "Host(`api.demo.vinas.lt`) && PathPrefix(`/payment/private`)"
