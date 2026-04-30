@@ -35,9 +35,6 @@ networks:
   # Service-specific networks for database isolation
   telegram_bot_net:
     driver: bridge
-  # Post generator (ai_post_generator) DB + service isolation
-  post_generator_net:
-    driver: bridge
   carfax_service_net:
     driver: bridge
   payment_service_net:
@@ -112,10 +109,6 @@ volumes:
 
   # Message queue data
   rabbitmq_data:
-
-  # Post generator (ai_post_generator / ai_post_bot) databases
-  pg_data_post_generator:
-  pg_data_post_generator_bot:
 
   # Monitoring stack volumes
   grafana-storage: # Dashboards and configurations
@@ -276,8 +269,6 @@ x-bid-base: &bid-base
       condition: service_healthy
     api_rpc_service:
       condition: service_healthy
-    calculator_rpc_service:
-      condition: service_healthy
     payment_rpc_service:
       condition: service_healthy
     auth_rpc_service:
@@ -292,7 +283,6 @@ x-bid-environment: &bid-environment
   ROOT_PATH: /bid
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
   RPC_API_URL: api_rpc_service:50051
-  RPC_CALCULATOR_URL: calculator_rpc_service:50052
   RPC_PAYMENT_URL: payment_rpc_service:50053
   RPC_AUTH_URL: auth_rpc_service:50054
   ENVIRONMENT:
@@ -741,161 +731,6 @@ services:
 
 
   # ----------------------------------------------------------------------
-  # 2.6b POST GENERATOR (ai_post_generator + ai_post_bot)
-  # ----------------------------------------------------------------------
-  # Rabbit consumer that builds posts; Telegram bot + Rabbit consumer for UI/notifications.
-  # Images: Docker Hub bidauto_post_generator_service / bidauto_post_generator_bot (see repos CI).
-
-  postgres_post_generator:
-    image: postgres:17.5
-    container_name: postgres_post_generator
-    volumes:
-      - pg_data_post_generator:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_USER=${POST_GENERATOR_DB_USER}
-      - POSTGRES_PASSWORD=${POST_GENERATOR_DB_PASS}
-      - POSTGRES_DB=${POST_GENERATOR_DB_NAME}
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POST_GENERATOR_DB_USER} -d ${POST_GENERATOR_DB_NAME}",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - post_generator_net
-      - adminer_database_net
-
-  postgres_post_generator_bot:
-    image: postgres:17.5
-    container_name: postgres_post_generator_bot
-    volumes:
-      - pg_data_post_generator_bot:/var/lib/postgresql/data
-    environment:
-      - POSTGRES_USER=${POST_GENERATOR_BOT_DB_USER}
-      - POSTGRES_PASSWORD=${POST_GENERATOR_BOT_DB_PASS}
-      - POSTGRES_DB=${POST_GENERATOR_BOT_DB_NAME}
-    restart: unless-stopped
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POST_GENERATOR_BOT_DB_USER} -d ${POST_GENERATOR_BOT_DB_NAME}",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    networks:
-      - telegram_bot_net
-      - adminer_database_net
-
-  post_generator_service:
-    image: ${POST_GENERATOR_SERVICE_IMAGE:-ivanskrb21/bidauto_post_generator_service:latest}
-    container_name: post_generator_service
-    command: ["python", "main.py"]
-    environment:
-      - DB_HOST=postgres_post_generator
-      - DB_PORT=5432
-      - DB_NAME=${POST_GENERATOR_DB_NAME}
-      - DB_USER=${POST_GENERATOR_DB_USER}
-      - DB_PASS=${POST_GENERATOR_DB_PASS}
-      - OPENAI_API_KEY=${POST_GENERATOR_OPENAI_API_KEY}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-      - RABBITMQ_EXCHANGE_NAME=events
-      - RABBITMQ_QUEUE_NAME=post_generator_service
-      - RPC_AUCTION_API_URL=api_rpc_service:50051
-      - RCP_CALCULATOR_URL=calculator_rpc_service:50052
-      - RPC_CHAT_BOT_URL=${POST_GENERATOR_RPC_CHAT_BOT_URL}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-      - DEBUG=${DEBUG:-true}
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres_post_generator:
-        condition: service_healthy
-      api_rpc_service:
-        condition: service_healthy
-      calculator_rpc_service:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - post_generator_net
-      - rabbitmq_net
-      - api_rpc_net
-      - calculator_rpc_net
-
-  post_generator_bot:
-    image: ${POST_GENERATOR_BOT_IMAGE:-ivanskrb21/bidauto_post_generator_bot:latest}
-    container_name: post_generator_bot
-    command: ["python", "-m", "app.main"]
-    environment:
-      - DB_HOST=postgres_post_generator_bot
-      - DB_PORT=5432
-      - DB_NAME=${POST_GENERATOR_BOT_DB_NAME}
-      - DB_USER=${POST_GENERATOR_BOT_DB_USER}
-      - DB_PASS=${POST_GENERATOR_BOT_DB_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-      - RABBITMQ_EXCHANGE_NAME=events
-      - RABBITMQ_QUEUE_NAME=post_generator_bot
-      - RPC_AUCTION_API_URL=api_rpc_service:50051
-      - TELEGRAM_BOT_TOKEN=${POST_GENERATOR_TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_FORUM_CHAT_ID=${POST_GENERATOR_TELEGRAM_FORUM_CHAT_ID}
-      - TELEGRAM_TOPIC_IDS_JSON=${POST_GENERATOR_TELEGRAM_TOPIC_IDS_JSON}
-      - SECRET_BOT_POST_GENERATOR_KEY=${POST_GENERATOR_SECRET_BOT_KEY}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-      - DEBUG=${DEBUG:-true}
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres_post_generator_bot:
-        condition: service_healthy
-      api_rpc_service:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - telegram_bot_net
-      - rabbitmq_net
-      - api_rpc_net
-
-  post_generator_bot_rabbit:
-    image: ${POST_GENERATOR_BOT_IMAGE:-ivanskrb21/bidauto_post_generator_bot:latest}
-    container_name: post_generator_bot_rabbit
-    command: ["python", "start_consuming.py"]
-    environment:
-      - DB_HOST=postgres_post_generator_bot
-      - DB_PORT=5432
-      - DB_NAME=${POST_GENERATOR_BOT_DB_NAME}
-      - DB_USER=${POST_GENERATOR_BOT_DB_USER}
-      - DB_PASS=${POST_GENERATOR_BOT_DB_PASS}
-      - RABBITMQ_URL=amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
-      - RABBITMQ_EXCHANGE_NAME=events
-      - RABBITMQ_QUEUE_NAME=post_generator_bot
-      - RPC_AUCTION_API_URL=api_rpc_service:50051
-      - TELEGRAM_BOT_TOKEN=${POST_GENERATOR_TELEGRAM_BOT_TOKEN}
-      - TELEGRAM_FORUM_CHAT_ID=${POST_GENERATOR_TELEGRAM_FORUM_CHAT_ID}
-      - TELEGRAM_TOPIC_IDS_JSON=${POST_GENERATOR_TELEGRAM_TOPIC_IDS_JSON}
-      - SECRET_BOT_POST_GENERATOR_KEY=${POST_GENERATOR_SECRET_BOT_KEY}
-      - ENVIRONMENT=${ENVIRONMENT:-development}
-      - DEBUG=${DEBUG:-true}
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres_post_generator_bot:
-        condition: service_healthy
-      api_rpc_service:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - telegram_bot_net
-      - rabbitmq_net
-      - api_rpc_net
-
-  # ----------------------------------------------------------------------
   # 2.7 CALCULATOR SERVICE (HTTP + INITIAL DATA LOAD)
   # ----------------------------------------------------------------------
   # Calculate delivery prices for vehicles
@@ -1019,7 +854,6 @@ services:
       - bid_service_net # Database access
       - internal_net # RabbitMQ communication
       - api_rpc_net # gRPC access to API service
-      - calculator_rpc_net # gRPC access to calculator service
       - payment_rpc_net # gRPC access to payment service
       - auth_rpc_net # gRPC access to auth service
       - traefik_net
@@ -1508,8 +1342,6 @@ services:
       - postgres_bid
       - postgres_order
       - postgres_file
-      - postgres_post_generator
-      - postgres_post_generator_bot
 
     healthcheck:
       test:
