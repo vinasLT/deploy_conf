@@ -347,7 +347,7 @@ x-file-environment: &file-environment
 
 # Post Generator Service Template
 x-post-generator-base: &post-generator-base
-  image: ivanskrb21/bidauto_post_generator_service:main
+  image: ivanskrb21/bidauto_post_generator_service:latest
   depends_on:
     postgres_post_generator:
       condition: service_healthy
@@ -373,7 +373,7 @@ x-post-generator-environment: &post-generator-environment
 
 # Post Generator Bot Template
 x-post-generator-bot-base: &post-generator-bot-base
-  image: ivanskrb21/bidauto_post_generator_bot:main
+  image: ivanskrb21/bidauto_post_generator_bot:latest
   depends_on:
     postgres_post_generator_bot:
       condition: service_healthy
