@@ -35,6 +35,10 @@ networks:
   # Service-specific networks for database isolation
   telegram_bot_net:
     driver: bridge
+  post_generator_service_net:
+    driver: bridge
+  post_generator_bot_net:
+    driver: bridge
   carfax_service_net:
     driver: bridge
   payment_service_net:
@@ -101,6 +105,8 @@ volumes:
   pg_data_bid:          # Bid service data
   pg_data_file:         # File service data
   pg_data_order:        # Order service data
+  pg_data_post_generator:
+  pg_data_post_generator_bot:
 
   # Caching volumes
   redis_auth_data:      # Auth service cache
@@ -342,6 +348,57 @@ x-file-environment: &file-environment
   AWS_REGION:
   S3_BUCKET:
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+
+# Post Generator Service Template
+x-post-generator-base: &post-generator-base
+  image: ivanskrb21/bidauto_post_generator_service:main
+  depends_on:
+    postgres_post_generator:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    api_rpc_service:
+      condition: service_healthy
+    calculator_rpc_service:
+      condition: service_healthy
+
+x-post-generator-environment: &post-generator-environment
+  DB_HOST: postgres_post_generator
+  DB_PORT: 5432
+  DB_USER: ${POST_GENERATOR_DB_USER}
+  DB_PASS: ${POST_GENERATOR_DB_PASS}
+  DB_NAME: ${POST_GENERATOR_DB_NAME}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+  RPC_AUCTION_API_URL: api_rpc_service:50051
+  RCP_CALCULATOR_URL: calculator_rpc_service:50052
+  OPENAI_API_KEY: ${POST_GENERATOR_OPENAI_API_KEY}
+  ENVIRONMENT:
+  RABBITMQ_EXCHANGE_NAME:
+
+# Post Generator Bot Template
+x-post-generator-bot-base: &post-generator-bot-base
+  image: ivanskrb21/bidauto_post_generator_bot:main
+  depends_on:
+    postgres_post_generator_bot:
+      condition: service_healthy
+    rabbitmq:
+      condition: service_healthy
+    api_rpc_service:
+      condition: service_healthy
+
+x-post-generator-bot-environment: &post-generator-bot-environment
+  DB_HOST: postgres_post_generator_bot
+  DB_PORT: 5432
+  DB_USER: ${POST_GENERATOR_BOT_DB_USER}
+  DB_PASS: ${POST_GENERATOR_BOT_DB_PASS}
+  DB_NAME: ${POST_GENERATOR_BOT_DB_NAME}
+  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
+  RABBITMQ_EXCHANGE_NAME:
+  RPC_AUCTION_API_URL: api_rpc_service:50051
+  TELEGRAM_FORUM_CHAT_ID: ${POST_GENERATOR_TELEGRAM_FORUM_CHAT_ID}
+  TELEGRAM_TOPIC_IDS_JSON: ${POST_GENERATOR_TELEGRAM_TOPIC_IDS_JSON}
+  SECRET_BOT_POST_GENERATOR_KEY: ${POST_GENERATOR_SECRET_BOT_KEY}
+  TELEGRAM_BOT_TOKEN: ${POST_GENERATOR_TELEGRAM_BOT_TOKEN}
 
 
 # Standard Health Check Template
@@ -685,6 +742,33 @@ services:
       - carfax_rpc_net      # gRPC communication with Carfax
       - telegram_bot_net    # Bot database access
       - internal_net        # HTTP service communication
+
+  # ----------------------------------------------------------------------
+  # 2.6.1 POST GENERATOR SERVICES (RabbitMQ workers)
+  # ----------------------------------------------------------------------
+
+  post_generator_service:
+    <<: *post-generator-base
+    container_name: post_generator_service
+    restart: unless-stopped
+    environment:
+      <<: *post-generator-environment
+    networks:
+      - post_generator_service_net
+      - internal_net
+      - api_rpc_net
+      - calculator_rpc_net
+
+  post_generator_bot:
+    <<: *post-generator-bot-base
+    container_name: post_generator_bot
+    restart: unless-stopped
+    environment:
+      <<: *post-generator-bot-environment
+    networks:
+      - post_generator_bot_net
+      - internal_net
+      - api_rpc_net
 
   # ----------------------------------------------------------------------
   # 2.7 CALCULATOR SERVICE (HTTP + INITIAL DATA LOAD)
@@ -1198,6 +1282,46 @@ services:
       - file_service_net
       - adminer_database_net
 
+  postgres_post_generator:
+    image: postgres:17.5
+    container_name: postgres_post_generator
+    volumes:
+      - pg_data_post_generator:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POST_GENERATOR_DB_USER}
+      - POSTGRES_PASSWORD=${POST_GENERATOR_DB_PASS}
+      - POSTGRES_DB=${POST_GENERATOR_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POST_GENERATOR_DB_USER} -d ${POST_GENERATOR_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - post_generator_service_net
+      - adminer_database_net
+
+  postgres_post_generator_bot:
+    image: postgres:17.5
+    container_name: postgres_post_generator_bot
+    volumes:
+      - pg_data_post_generator_bot:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=${POST_GENERATOR_BOT_DB_USER}
+      - POSTGRES_PASSWORD=${POST_GENERATOR_BOT_DB_PASS}
+      - POSTGRES_DB=${POST_GENERATOR_BOT_DB_NAME}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POST_GENERATOR_BOT_DB_USER} -d ${POST_GENERATOR_BOT_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - post_generator_bot_net
+      - adminer_database_net
+
   # ======================================================================
   # 5.2 ADMINER DATABASE MANAGEMENT
   # ======================================================================
@@ -1230,6 +1354,8 @@ services:
       - postgres_bid
       - postgres_order
       - postgres_file
+      - postgres_post_generator
+      - postgres_post_generator_bot
 
     healthcheck:
       test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080 || exit 1" ]
