@@ -369,6 +369,7 @@ x-post-generator-environment: &post-generator-environment
   RCP_CALCULATOR_URL: calculator_rpc_service:50052
   OPENAI_API_KEY: ${POST_GENERATOR_OPENAI_API_KEY}
   ENVIRONMENT:
+  DEBUG:
   RABBITMQ_EXCHANGE_NAME:
 
 # Post Generator Bot Template
@@ -390,6 +391,8 @@ x-post-generator-bot-environment: &post-generator-bot-environment
   DB_NAME: ${POST_GENERATOR_BOT_DB_NAME}
   RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq/
   RABBITMQ_EXCHANGE_NAME:
+  ENVIRONMENT:
+  DEBUG:
   RPC_AUCTION_API_URL: api_rpc_service:50051
   TELEGRAM_FORUM_CHAT_ID: ${POST_GENERATOR_TELEGRAM_FORUM_CHAT_ID}
   TELEGRAM_TOPIC_IDS_JSON: ${POST_GENERATOR_TELEGRAM_TOPIC_IDS_JSON}
