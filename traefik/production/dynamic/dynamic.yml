@@ -6,6 +6,13 @@ http:
       service: frontend
       priority: 10
 
+    frontend-www-redirect:
+      entryPoints: [websecure]
+      rule: "Host(`www.vinas.lt`)"
+      service: frontend
+      priority: 20
+      middlewares: [www-to-apex-redirect]
+
     api:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/auction-api`)"
@@ -202,6 +209,12 @@ http:
           - url: "http://database_adminer:8080"
 
   middlewares:
+    www-to-apex-redirect:
+      redirectRegex:
+        regex: "^https?://www\\.vinas\\.lt(.*)"
+        replacement: "https://vinas.lt${1}"
+        permanent: true
+
     api-strip:
       stripPrefix:
         prefixes: ["/auction-api"]

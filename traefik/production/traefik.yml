@@ -17,7 +17,14 @@ api:
 entryPoints:
   web:
     address: ":80"
-    # Важно! Не делаем автоматический редирект при получении сертификатов
+    # Redirect all HTTP traffic to HTTPS. ACME HTTP-01 challenge on port 80 still works
+    # (Traefik handles /.well-known/acme-challenge/ before the redirect).
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
 
   websecure:
     address: ":443"
