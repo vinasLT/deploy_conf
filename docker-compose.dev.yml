@@ -816,6 +816,18 @@ services:
       - internal_net
       - api_rpc_net
 
+  post_generator_bot_consumer:
+    <<: *post-generator-bot-base
+    container_name: post_generator_bot_consumer
+    command: ["python", "start_consuming.py"]
+    restart: unless-stopped
+    environment:
+      <<: *post-generator-bot-environment
+    networks:
+      - post_generator_bot_net
+      - internal_net
+      - api_rpc_net
+
   # ----------------------------------------------------------------------
   # 2.7 CALCULATOR SERVICE (HTTP + INITIAL DATA LOAD)
   # ----------------------------------------------------------------------
