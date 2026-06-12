@@ -1,5 +1,27 @@
 http:
   routers:
+    # HTTP → HTTPS (file routers; entrypoint redirect is also set in traefik.yml + compose)
+    http-redirect-vinas:
+      entryPoints: [web]
+      rule: "Host(`vinas.lt`) || Host(`www.vinas.lt`)"
+      middlewares: [https-redirect]
+      service: noop@internal
+      priority: 1
+
+    http-redirect-api:
+      entryPoints: [web]
+      rule: "Host(`api.vinas.lt`)"
+      middlewares: [https-redirect]
+      service: noop@internal
+      priority: 1
+
+    http-redirect-adminer:
+      entryPoints: [web]
+      rule: "Host(`adminer.vinas.lt`)"
+      middlewares: [https-redirect]
+      service: noop@internal
+      priority: 1
+
     frontend:
       entryPoints: [websecure]
       rule: "Host(`vinas.lt`)"
@@ -209,6 +231,11 @@ http:
           - url: "http://database_adminer:8080"
 
   middlewares:
+    https-redirect:
+      redirectScheme:
+        scheme: https
+        permanent: true
+
     www-to-apex-redirect:
       redirectRegex:
         regex: "^https?://www\\.vinas\\.lt(.*)"
