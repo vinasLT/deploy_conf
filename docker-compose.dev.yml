@@ -424,7 +424,7 @@ services:
      - NEXT_PUBLIC_API_URL=http://localhost
 
   # ======================================================================
-  # 1. REVERSE PROXY & LOAD BALANCER
+  # 1. REVERSE PROXY and LOAD BALANCER
   # ======================================================================
   # Traefik handles incoming requests and routes them to appropriate services
   # Provides SSL termination and load balancing capabilities
