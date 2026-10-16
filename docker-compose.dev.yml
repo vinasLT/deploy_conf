@@ -279,6 +279,8 @@ x-bid-base: &bid-base
       condition: service_healthy
     auth_rpc_service:
       condition: service_healthy
+    calculator_rpc_service:
+      condition: service_healthy
 
 x-bid-environment: &bid-environment
   DB_HOST: postgres_bid
@@ -291,6 +293,7 @@ x-bid-environment: &bid-environment
   RPC_API_URL: api_rpc_service:50051
   RPC_PAYMENT_URL: payment_rpc_service:50053
   RPC_AUTH_URL: auth_rpc_service:50054
+  RPC_CALCULATOR_URL: calculator_rpc_service:50052
   ENVIRONMENT:
   DEBUG:
 
@@ -816,18 +819,6 @@ services:
       - internal_net
       - api_rpc_net
 
-  post_generator_bot_consumer:
-    <<: *post-generator-bot-base
-    container_name: post_generator_bot_consumer
-    command: ["python", "start_consuming.py"]
-    restart: unless-stopped
-    environment:
-      <<: *post-generator-bot-environment
-    networks:
-      - post_generator_bot_net
-      - internal_net
-      - api_rpc_net
-
   # ----------------------------------------------------------------------
   # 2.7 CALCULATOR SERVICE (HTTP + INITIAL DATA LOAD)
   # ----------------------------------------------------------------------
@@ -952,6 +943,7 @@ services:
       - bid_service_net # Database access
       - internal_net # RabbitMQ communication
       - api_rpc_net # gRPC access to API service
+      - calculator_rpc_net # gRPC access to calculator service
       - payment_rpc_net # gRPC access to payment service
       - auth_rpc_net # gRPC access to auth service
       - traefik_net
@@ -1462,7 +1454,7 @@ services:
     environment:
       - ADMINER_DEFAULT_SERVER=postgres_api
       - ADMINER_DESIGN=pepa-linha-dark
-      - ADMINER_PLUGINS=tables-filter tinymce
+      - ADMINER_PLUGINS=tables-filter
 
     networks:
       - adminer_database_net
