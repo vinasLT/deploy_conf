@@ -424,7 +424,7 @@ services:
       - auth_service_net # Database access
       - internal_net # Inter-service communication
 
-  # Auth gRPC Service (Isolated for internal communication)
+  #Auth gRPC Service (Isolated for internal communication)
   auth_rpc_service:
     <<: *auth-base
     container_name: auth_rpc_service
