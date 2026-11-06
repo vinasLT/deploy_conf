@@ -33,9 +33,13 @@ jobs:
           script: |
             set -e
             if [ "$DEPLOY_BRANCH" = "main" ]; then
-              COMPOSE_FILE="docker-compose.yml"
+              DEPLOY_ENV="prod"
             else
-              COMPOSE_FILE="docker-compose.demo.yml"
+              DEPLOY_ENV="demo"
+            fi
+            if ! command -v make >/dev/null 2>&1; then
+              sudo apt-get update
+              sudo apt-get install -y make
             fi
             if ! command -v infisical >/dev/null 2>&1; then
               curl -1sLf 'https://artifacts-cli.infisical.com/setup.deb.sh' | sudo -E bash
@@ -51,9 +55,9 @@ jobs:
             git fetch origin "$DEPLOY_BRANCH"
             git reset --hard "origin/$DEPLOY_BRANCH"
             git clean -fd
-            docker compose -f "$COMPOSE_FILE" pull
-            
-            docker compose -f "$COMPOSE_FILE" down
-            
-            infisical run --projectId="$INFISICAL_PROJECT_ID" --env=prod --token="$INFISICAL_TOKEN" --domain=https://eu.infisical.com -- docker compose -f "$COMPOSE_FILE" up -d --build
+            # `include:` with service overrides needs a recent Docker Compose
+            docker compose version
+            # make pulls and updates under Infisical (INFISICAL_TOKEN / INFISICAL_PROJECT_ID)
+            export INFISICAL_PROJECT_ID
+            make deploy ENV="$DEPLOY_ENV"
             echo "Deployment completed successfully!"
