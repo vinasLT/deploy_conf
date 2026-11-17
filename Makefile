@@ -1,38 +1,60 @@
-INFISICAL_ENV ?= dev
-COMPOSE_FILE ?= docker-compose.dev.yml
-COMPOSE_ARM_FILE ?= docker-compose.dev.arm64.yml
+# Usage:
+#   make up                    # dev (default), local
+#   make deploy ENV=prod       # prod server
+#   make deploy ENV=demo       # demo server (uses the Infisical `prod` environment)
+#
+# Secrets (and CONTAINER_TAG, which selects the image tags) come from Infisical.
+# In CI export INFISICAL_TOKEN and INFISICAL_PROJECT_ID; locally the CLI login and
+# .infisical.json are used.
 
-.PHONY: up down logs restart clean-volumes pull pull-arm help
+ENV ?= dev
 
+ifeq ($(ENV),prod)
+  COMPOSE_FILE ?= prod/docker-compose.yml
+  INFISICAL_ENV ?= prod
+else ifeq ($(ENV),demo)
+  COMPOSE_FILE ?= demo/docker-compose.demo.yml
+  INFISICAL_ENV ?= prod
+else ifeq ($(ENV),dev)
+  COMPOSE_FILE ?= dev/docker-compose.dev.yml
+  INFISICAL_ENV ?= dev
+else
+  $(error Unknown ENV '$(ENV)', use dev, demo or prod)
+endif
+
+INFISICAL_DOMAIN ?= https://eu.infisical.com
+INFISICAL_RUN = infisical run --env=$(INFISICAL_ENV) --domain=$(INFISICAL_DOMAIN) \
+	$(if $(INFISICAL_PROJECT_ID),--projectId=$(INFISICAL_PROJECT_ID)) \
+	$(if $(INFISICAL_TOKEN),--token=$(INFISICAL_TOKEN)) --
+COMPOSE = docker compose -f $(COMPOSE_FILE)
+
+.PHONY: up deploy down logs restart clean-volumes pull help
+
+pull:
+	$(INFISICAL_RUN) $(COMPOSE) pull
+
+# In-place update: only changed containers are recreated, services removed from
+# compose are stopped by --remove-orphans.
 up: pull
-	infisical run --env=$(INFISICAL_ENV) -- docker compose -f $(COMPOSE_FILE) up -d
+	$(INFISICAL_RUN) $(COMPOSE) up -d --remove-orphans
 
-up-arm: pull-arm
-	infisical run --env=$(INFISICAL_ENV) -- docker compose -f $(COMPOSE_ARM_FILE) up -d
+deploy: up
 
 down:
-	docker compose -f $(COMPOSE_FILE) down
-
-down-arm:
-	infisical run --env=$(INFISICAL_ENV) -- docker compose -f $(COMPOSE_ARM_FILE) down
+	$(COMPOSE) down --remove-orphans
 
 logs:
-	docker compose -f $(COMPOSE_FILE) logs -f
+	$(COMPOSE) logs -f
 
 restart: down up
 
 clean-volumes:
-	docker compose -f $(COMPOSE_FILE) down -v
-
-pull:
-	docker compose -f $(COMPOSE_FILE) pull
-
-pull-arm:
-	infisical run --env=$(INFISICAL_ENV) -- docker compose -f $(COMPOSE_ARM_FILE) pull
+	$(COMPOSE) down -v
 
 help:
 	@echo "Available commands:"
-	@echo "  up            - Pull images and start containers"
+	@echo "  up            - Pull images and start/update containers"
+	@echo "  deploy        - Same as up (used by CI)"
 	@echo "  down          - Stop and remove containers"
 	@echo "  logs          - Follow container logs"
 	@echo "  restart       - Stop and start containers"
@@ -40,6 +62,7 @@ help:
 	@echo "  pull          - Pull latest images"
 	@echo "  help          - Show this help message"
 	@echo ""
-	@echo "Environment variables:"
-	@echo "  INFISICAL_ENV - Environment for Infisical (default: dev)"
-	@echo "  COMPOSE_FILE  - Docker Compose file (default: docker-compose.dev.yml)"
+	@echo "Variables:"
+	@echo "  ENV           - dev (default), demo or prod"
+	@echo "  COMPOSE_FILE  - Override the compose file (default depends on ENV)"
+	@echo "  INFISICAL_ENV - Override the Infisical environment (dev for dev, prod for demo/prod)"

@@ -1,0 +1,105 @@
+# ========================================================================
+# PRODUCTION
+# ========================================================================
+# Docker Compose 2.20+ (include). Run from the repo root, with env from
+# Infisical / the shell:
+#   docker compose -f prod/docker-compose.yml up -d
+#
+# Everything shared lives in ../general/docker-compose.base.yml. This file
+# defines frontend + traefik and the production-only service overrides.
+# Relative paths in this file resolve from prod/.
+#
+# `name: deploy_conf` keeps the volume/network prefixes of the old
+# single-file setup (deploy_conf_pg_data_*, deploy_conf_traefik_letsencrypt).
+# Do not change it, or production would start with empty volumes.
+# ========================================================================
+
+include:
+  - path: ../general/docker-compose.base.yml
+
+name: deploy_conf
+
+volumes:
+  # SSL certificates (production and demo only)
+  traefik_letsencrypt:
+
+services:
+
+  frontend:
+    image: vinasfront/vinas-frontend:prod
+    container_name: frontend
+    restart: unless-stopped
+    expose:
+      - 3000
+    networks:
+      - traefik_net
+
+  # ======================================================================
+  # 1. REVERSE PROXY & LOAD BALANCER
+  # ======================================================================
+  # Traefik handles incoming requests and routes them to appropriate services
+  # Provides SSL termination and load balancing capabilities
+
+  traefik:
+    image: traefik:v3.5
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+      - "--providers.docker=true"                    # Enable Docker provider
+      - "--providers.docker.exposedbydefault=false"  # Require explicit labels
+      - "--entrypoints.web.address=:80"              # HTTP entrypoint
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      - "--entrypoints.websecure.address=:443"       # HTTPS entrypoint
+      - "--log.level=DEBUG"                          # Detailed logging
+    ports:
+      - "80:80"      # HTTP traffic
+      - "443:443"      # HTTPS traffic
+      - "8080:8080"  # Traefik dashboard
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/logs:/logs
+      - traefik_letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket access
+    networks:
+      - traefik_net
+
+  # ======================================================================
+  # PRODUCTION OVERRIDES OF SERVICES DEFINED IN THE BASE FILE
+  # ======================================================================
+
+  notification_service:
+    environment:
+      ADMINS_TG_ID:
+
+  payment_service:
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  payment_rpc_service:
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  carfax_service:
+    restart: unless-stopped
+
+  carfax_rpc_service:
+    restart: unless-stopped
+
+  bot:
+    environment:
+      # gRPC access to the calculator and OpenAI (production only)
+      RPC_CALCULATOR_URL: calculator_rpc_service:50052
+      OPENAI_API_KEY:
+    networks:
+      - calculator_rpc_net  # gRPC communication with Calculator
+
+  adminer:
+    # Available through Traefik
+    expose:
+      - 8080

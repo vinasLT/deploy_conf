@@ -1,0 +1,92 @@
+# ========================================================================
+# DEMO
+# ========================================================================
+# Docker Compose 2.20+ (include). Run from the repo root, with env from
+# Infisical / the shell:
+#   docker compose -f demo/docker-compose.demo.yml up -d
+#
+# Everything shared lives in ../general/docker-compose.base.yml. This file
+# defines frontend + traefik and the demo service overrides.
+# Relative paths in this file resolve from demo/.
+#
+# `name: deploy_conf` keeps the volume/network prefixes of the old
+# single-file setup. Do not change it.
+# ========================================================================
+
+include:
+  - path: ../general/docker-compose.base.yml
+
+name: deploy_conf
+
+volumes:
+  # SSL certificates
+  traefik_letsencrypt:
+
+services:
+
+  frontend:
+    image: vinasfront/vinas-frontend:demo
+    container_name: frontend
+    restart: unless-stopped
+    expose:
+      - 3000
+    networks:
+      - traefik_net
+
+  # ======================================================================
+  # 1. REVERSE PROXY & LOAD BALANCER
+  # ======================================================================
+  # Traefik handles incoming requests and routes them to appropriate services
+  # Provides SSL termination and load balancing capabilities
+
+  traefik:
+    image: traefik:v3.5
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"                    # Enable Docker provider
+      - "--providers.docker.exposedbydefault=false"  # Require explicit labels
+      - "--entrypoints.web.address=:80"              # HTTP entrypoint
+      - "--entrypoints.websecure.address=:443"             # HTTPS entrypoint
+      - "--log.level=DEBUG"                          # Detailed logging
+    ports:
+      - "80:80"      # HTTP traffic
+      - "443:443"      # HTTPS traffic
+      - "8080:8080"  # Traefik dashboard
+    volumes:
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/logs:/logs
+      - traefik_letsencrypt:/letsencrypt
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # Docker socket access
+    networks:
+      - traefik_net
+
+  # ======================================================================
+  # DEMO OVERRIDES OF SERVICES DEFINED IN THE BASE FILE
+  # ======================================================================
+
+  notification_service:
+    environment:
+      ADMINS_TG_ID:
+
+  payment_service:
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  payment_rpc_service:
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  carfax_service:
+    restart: unless-stopped
+
+  carfax_rpc_service:
+    restart: unless-stopped
+
+  adminer:
+    # Available through Traefik at http://localhost/adminer/
+    expose:
+      - 8080
