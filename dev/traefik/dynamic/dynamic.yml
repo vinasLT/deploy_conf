@@ -8,6 +8,22 @@ http:
       priority: 100
       middlewares: [cors, api-strip]
 
+    # Admin job routes need auth-forward so X-User-* headers reach api_service.
+    api-protected:
+      entryPoints: [web]
+      rule: "Host(`localhost`) && PathPrefix(`/auction-api/admin`)"
+      service: api-service
+      priority: 200
+      middlewares: [cors, auth-forward, api-strip]
+
+    # Public sitemaps on localhost → api_service (presigned S3 redirect)
+    sitemap:
+      entryPoints: [web, websecure]
+      rule: "Host(`localhost`) && (PathPrefix(`/sitemap`) || PathPrefix(`/static_sitemaps/`))"
+      service: api-service
+      priority: 50
+      middlewares: [sitemap-rewrite]
+
     frontend:
       entryPoints: [ websecure ]
       rule: "Host(`localhost`)"
@@ -178,6 +194,11 @@ http:
     api-strip:
       stripPrefix:
         prefixes: [ "/auction-api" ]
+
+    sitemap-rewrite:
+      replacePathRegex:
+        regex: "^/(.*)$"
+        replacement: "/public/v1/sitemaps/$1"
 
     calculator-strip:
       stripPrefix:

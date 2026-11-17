@@ -35,6 +35,15 @@ http:
       priority: 20
       middlewares: [www-to-apex-redirect]
 
+    # Public sitemaps on the marketing domain → api_service (presigned S3 redirect)
+    sitemap:
+      entryPoints: [websecure]
+      rule: "Host(`vinas.lt`) && (PathPrefix(`/sitemap`) || PathPrefix(`/static_sitemaps/`))"
+      service: api-service
+      priority: 50
+      tls: {}
+      middlewares: [sitemap-rewrite]
+
     api:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/auction-api`)"
@@ -42,6 +51,15 @@ http:
       priority: 100
       tls: {}
       middlewares: [api-strip, cors]
+
+    # Admin job routes need auth-forward so X-User-* headers reach api_service.
+    api-protected:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && PathPrefix(`/auction-api/admin`)"
+      service: api-service
+      priority: 200
+      tls: {}
+      middlewares: [cors, auth-forward, api-strip]
 
     payment:
       entryPoints: [ websecure ]
@@ -245,6 +263,11 @@ http:
     api-strip:
       stripPrefix:
         prefixes: ["/auction-api"]
+
+    sitemap-rewrite:
+      replacePathRegex:
+        regex: "^/(.*)$"
+        replacement: "/public/v1/sitemaps/$1"
 
     calculator-strip:
       stripPrefix:
