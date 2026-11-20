@@ -44,6 +44,15 @@ http:
       tls: {}
       middlewares: [sitemap-rewrite]
 
+    # Googlebot's renderer must not crawl the public API. The app serves this
+    # file at /robots.txt, so the /auction-api prefix is not stripped.
+    api-robots:
+      entryPoints: [websecure]
+      rule: "Host(`api.vinas.lt`) && Path(`/robots.txt`)"
+      service: api-service
+      priority: 300
+      tls: {}
+
     api:
       entryPoints: [websecure]
       rule: "Host(`api.vinas.lt`) && PathPrefix(`/auction-api`)"

@@ -185,6 +185,8 @@ x-api-environment: &api-environment
   AWS_REGION:
   S3_BUCKET:
   COMPANY_LINK:
+  CLOUDFLARE_API_TOKEN:
+  CLOUDFLARE_ZONE_ID:
   REDIS_URL: redis://redis_api_service:6379/0
   GRPC_SERVER_PORT: 50051
   ENVIRONMENT:
