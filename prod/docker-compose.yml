@@ -22,6 +22,8 @@ name: deploy_conf
 volumes:
   # SSL certificates (production and demo only)
   traefik_letsencrypt:
+  # Next.js fetch cache. Without this, every deploy forgets lot responses.
+  frontend_next_cache:
 
 services:
 
@@ -29,6 +31,8 @@ services:
     image: vinasfront/vinas-frontend:prod
     container_name: frontend
     restart: unless-stopped
+    volumes:
+      - frontend_next_cache:/app/.next/cache
     expose:
       - 3000
     networks:
