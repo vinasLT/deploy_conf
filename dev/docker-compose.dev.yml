@@ -34,9 +34,6 @@ services:
 #     - traefik_net
 #    environment:
 #     - NEXT_PUBLIC_API_URL=http://localhost
-#     # Server-side rendering runs inside this container, where `localhost` is the
-#     # container itself. Reach the auction API directly over the docker network.
-#     - LOT_API_URL=http://api_service:8000/public/v1/lot
 
   # ======================================================================
   # 1. REVERSE PROXY and LOAD BALANCER
